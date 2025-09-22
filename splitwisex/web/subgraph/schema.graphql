@@ -1,0 +1,105 @@
+type Group @entity {
+  id: ID!
+  name: String!
+  creator: User!
+  members: [User!]!
+  expenses: [Expense!]! @derivedFrom(field: "group")
+  createdAt: BigInt!
+}
+
+type User @entity {
+  id: ID!
+  ensName: String
+  groups: [Group!]! @derivedFrom(field: "members")
+  paidExpenses: [Expense!]! @derivedFrom(field: "payer")
+  debts: [DebtEdge!]! @derivedFrom(field: "debtor")
+  credits: [DebtEdge!]! @derivedFrom(field: "creditor")
+}
+
+type Expense @entity {
+  id: ID!
+  group: Group!
+  payer: User!
+  token: Bytes!
+  amount: BigInt!
+  cid: String!
+  memo: String
+  createdAt: BigInt!
+  voided: Boolean!
+  debtors: [ExpenseDebtor!]! @derivedFrom(field: "expense")
+
+  # Filecoin integration fields
+  receipt: Receipt
+  filecoinDealId: String
+  filecoinStatus: String # "PENDING", "PINNED", "STORED", "FAILED"
+}
+
+type ExpenseDebtor @entity {
+  id: ID!
+  expense: Expense!
+  debtor: User!
+  amount: BigInt!
+}
+
+type DebtEdge @entity {
+  id: ID!
+  group: Group!
+  debtor: User!
+  creditor: User!
+  token: Bytes!
+  amount: BigInt!
+  open: Boolean!
+}
+
+# New entities for Filecoin integration
+type Receipt @entity {
+  id: ID!
+  expense: Expense!
+  cid: String!
+  dealId: String
+  status: String! # "PENDING", "PINNED", "STORED", "FAILED"
+  pinner: User!
+  pinnedAt: BigInt!
+  updatedAt: BigInt!
+
+  # Filecoin deal information
+  filecoinDealId: String
+  storageProvider: String
+  dealStatus: String
+  dealSize: BigInt
+  dealDuration: BigInt
+  dealPrice: BigInt
+}
+
+type ReceiptStatusUpdate @entity {
+  id: ID!
+  receipt: Receipt!
+  oldStatus: String
+  newStatus: String!
+  updatedAt: BigInt!
+  updatedBy: User!
+}
+
+# Events for tracking
+type ReceiptPinnedEvent @entity {
+  id: ID!
+  expenseId: BigInt!
+  receipt: Receipt!
+  cid: String!
+  dealId: String!
+  pinner: User!
+  timestamp: BigInt!
+  transactionHash: Bytes!
+  blockNumber: BigInt!
+}
+
+type ReceiptStatusUpdatedEvent @entity {
+  id: ID!
+  receipt: Receipt!
+  oldStatus: String
+  newStatus: String!
+  timestamp: BigInt!
+  updatedBy: User!
+  transactionHash: Bytes!
+  blockNumber: BigInt!
+}

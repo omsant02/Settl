@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+build/
+generated/
+
+# The Graph specific
+abis/
+networks.json
+
+# Compiled AssemblyScript
+*.wasm
+
+# Local development
+.local/
+.data/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Graph CLI auth
+.graph-auth
+
+# Coverage
+coverage/
+*.lcov
+
+# Cache
+.cache/
+cache/
+
+# Testing
+test-results/
+tests/coverage/
+
+# Graph Protocol temporary files
+*.orig
+graph.yaml.bak
+
+# Deployment artifacts
+subgraph.yaml.bak
+schema.graphql.bak

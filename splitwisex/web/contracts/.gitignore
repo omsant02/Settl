@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Hardhat files
+cache/
+artifacts/
+
+# Foundry files
+out/
+cache_forge/
+
+# Compilation artifacts
+*.abi
+*.bin
+*.metadata.json
+
+# Deployment artifacts
+deployments/
+broadcast/
+
+# Coverage reports
+coverage/
+coverage.json
+*.lcov
+
+# Gas reports
+gas-report.txt
+.gas-snapshot
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Solidity compiler temporary files
+*.sol~
+
+# Truffle
+build/
+
+# OpenZeppelin upgrades
+.openzeppelin/
+upgrades/
+
+# Typechain
+typechain/
+typechain-types/
+
+# Slither
+.slither/
+
+# Mythril
+*.myth

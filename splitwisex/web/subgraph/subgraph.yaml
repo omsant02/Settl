@@ -1,0 +1,68 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  # Main Ledger contract (your existing contract)
+  - kind: ethereum
+    name: Ledger
+    network: sepolia # Change to 'calibration' for Filecoin Calibration testnet
+    source:
+      address: "0x..." # Replace with your deployed Ledger contract address
+      abi: Ledger
+      startBlock: 1 # Replace with deployment block number
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Group
+        - User
+        - Expense
+        - ExpenseDebtor
+        - DebtEdge
+      abis:
+        - name: Ledger
+          file: ./abis/Ledger.json
+      eventHandlers:
+        - event: GroupCreated(indexed uint256,string,indexed address)
+          handler: handleGroupCreated
+        - event: MemberAdded(indexed uint256,indexed address)
+          handler: handleMemberAdded
+        - event: MemberRemoved(indexed uint256,indexed address)
+          handler: handleMemberRemoved
+        - event: ExpenseAdded(indexed uint256,uint256,indexed address,address,uint256,bytes,string,string)
+          handler: handleExpenseAdded
+        - event: ExpenseVoided(indexed uint256,uint256)
+          handler: handleExpenseVoided
+        - event: DebtUpdated(indexed uint256,indexed address,indexed address,address,uint256,bool)
+          handler: handleDebtUpdated
+      file: ./src/ledger.ts
+
+  # New ReceiptRegistry contract for Filecoin integration
+  - kind: ethereum
+    name: ReceiptRegistry
+    network: sepolia # Change to 'calibration' for Filecoin Calibration testnet
+    source:
+      address: "0x..." # Replace with your deployed ReceiptRegistry contract address
+      abi: ReceiptRegistry
+      startBlock: 1 # Replace with deployment block number
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Receipt
+        - ReceiptPinnedEvent
+        - ReceiptStatusUpdatedEvent
+        - ReceiptStatusUpdate
+        - Expense
+        - User
+      abis:
+        - name: ReceiptRegistry
+          file: ./abis/ReceiptRegistry.json
+      eventHandlers:
+        - event: ReceiptPinned(indexed uint256,string,string,indexed address,uint256)
+          handler: handleReceiptPinned
+        - event: ReceiptStatusUpdated(indexed uint256,string,string,string,uint256)
+          handler: handleReceiptStatusUpdated
+      file: ./src/receipt-registry.ts

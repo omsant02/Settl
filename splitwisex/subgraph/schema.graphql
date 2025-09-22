@@ -1,0 +1,30 @@
+type User @entity(immutable: false) {
+  id: ID!, ensName: String, worldIdVerified: Boolean
+}
+
+type Group @entity(immutable: false) {
+  id: ID!, name: String!, members: [User!]!, createdAt: BigInt!
+}
+
+type Expense @entity(immutable: false) {
+  id: ID!, group: Group!, payer: User!, token: Bytes!, amount: BigInt!,
+  cid: String!, memo: String, createdAt: BigInt!, voided: Boolean!
+}
+
+type DebtEdge @entity(immutable: false) {
+  id: ID!, group: Group!, debtor: User!, creditor: User!,
+  token: Bytes!, amount: BigInt!, open: Boolean!
+}
+
+type SettlementIntent @entity(immutable: true) {
+  id: ID!, group: Group!, debtor: User!, creditor: User!,
+  routeId: String, createdAt: BigInt!
+}
+
+type Settlement @entity(immutable: true) {
+  id: ID!, group: Group!, debtor: User!, creditor: User!,
+  token: Bytes!, amount: BigInt!, dstChainId: BigInt!,
+  dstTxHash: Bytes!, finalizedAt: BigInt!
+}
+
+
