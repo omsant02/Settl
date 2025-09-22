@@ -1,10 +1,13 @@
 'use client'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useSubgraph } from '@/hooks/useSubgraph'
 import { GET_EXPENSE_BY_ID, GET_GROUP_BY_NAME } from '@/lib/queries'
 import ENSName from '@/components/ENSName'
 import { ipfsGateway } from '@/lib/ipfs'
 import Link from 'next/link'
+import { useAccount, useWriteContract } from 'wagmi'
+import { useState } from 'react'
+import Ledger from '@/abis/Ledger.json'
 
 // Token configurations for display
 const TOKEN_INFO: { [address: string]: { symbol: string; decimals: number } } = {
@@ -50,7 +53,10 @@ export default function ExpenseDetailsPage() {
   const params = useParams<{ name: string; id: string }>()
   const groupName = params?.name ? decodeURIComponent(params.name) : ''
   const expenseId = params?.id || ''
-
+  const router = useRouter()
+  const { address: userAddress } = useAccount()
+  const { writeContractAsync } = useWriteContract()
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Get group data
   const { data: groupData } = useSubgraph<any>(GET_GROUP_BY_NAME(groupName), [groupName])
@@ -67,6 +73,42 @@ export default function ExpenseDetailsPage() {
   const totalAmount = getUSDValue(expense.amount, expense.token)
   const memberCount = group?.members?.length || 1
   const sharePerMember = totalAmount / memberCount
+
+  // Check if current user is the payer
+  const isUserPayer = expense.payer.id.toLowerCase() === userAddress?.toLowerCase()
+
+  const handleDeleteExpense = async () => {
+    if (!userAddress || !isUserPayer) {
+      alert('Only the person who paid can delete this expense')
+      return
+    }
+
+    const confirmDelete = window.confirm('Are you sure you want to delete this expense? This action cannot be undone.')
+    if (!confirmDelete) return
+
+    setIsDeleting(true)
+    try {
+      const contractAddr = process.env.NEXT_PUBLIC_LEDGER_ADDRESS as `0x${string}`
+
+      const txHash = await writeContractAsync({
+        address: contractAddr,
+        abi: Ledger.abi,
+        functionName: 'voidExpense',
+        args: [BigInt(group.id), BigInt(expenseId)]
+      })
+
+      console.log('Expense deleted:', txHash)
+      alert('✅ Expense deleted successfully!')
+
+      // Navigate back to group page
+      router.push(`/group/${encodeURIComponent(groupName)}`)
+    } catch (error: any) {
+      console.error('Failed to delete expense:', error)
+      alert(`Failed to delete expense: ${error.message || 'Unknown error'}`)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -118,11 +160,6 @@ export default function ExpenseDetailsPage() {
             return (
               <div key={member.id} className="p-4 flex justify-between items-center">
                 <div className="flex items-center">
-                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-3">
-                    <span className="text-sm font-medium">
-                      {member.ensName?.charAt(0).toUpperCase() || member.id.slice(2, 4).toUpperCase()}
-                    </span>
-                  </div>
                   <ENSName address={member.id} />
                 </div>
 
@@ -153,23 +190,21 @@ export default function ExpenseDetailsPage() {
 
           <div className="p-4">
             {(() => {
-              const imageUrl = ipfsGateway(expense.cid)
-              const fallbackUrl = ipfsGateway(expense.cid, true)
+              // Check if this is a legacy receipt that needs fixing
+              const isLegacyReceipt = expense.cid.includes('/') && !expense.cid.includes('storacha-upload-')
+              const imageUrl = isLegacyReceipt ? ipfsGateway(expense.cid, true) : ipfsGateway(expense.cid)
+
               console.log('Receipt CID:', expense.cid)
-              console.log('Generated image URL:', imageUrl)
-              console.log('Fallback image URL:', fallbackUrl)
+              console.log('Is legacy receipt:', isLegacyReceipt)
+              console.log('Using image URL:', imageUrl)
 
               return (
                 <img
                   src={imageUrl}
                   alt="Receipt"
                   className="w-full rounded-lg shadow-sm"
-                  onLoad={() => console.log('Image loaded successfully:', imageUrl)}
-                  onError={(e) => {
-                    console.error('Image failed to load:', imageUrl)
-                    console.log('Trying fallback URL:', fallbackUrl)
-                    e.currentTarget.src = fallbackUrl
-                  }}
+                  onLoad={() => console.log('Image loaded successfully')}
+                  onError={() => console.log('Image failed to load')}
                 />
               )
             })()}
@@ -177,12 +212,21 @@ export default function ExpenseDetailsPage() {
         </div>
       )}
 
-      {/* Actions */}
-      <div className="p-4 mt-auto">
-        <button className="w-full bg-red-500 text-white py-3 rounded-lg font-semibold">
-          Delete expense
-        </button>
-      </div>
+      {/* Actions - Only show delete button to the person who paid */}
+      {isUserPayer && (
+        <div className="p-4 mt-auto">
+          <button
+            onClick={handleDeleteExpense}
+            disabled={isDeleting}
+            className="w-full bg-red-500 text-white py-3 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-600 transition-colors"
+          >
+            {isDeleting ? 'Deleting...' : 'Delete expense'}
+          </button>
+          <p className="text-xs text-gray-500 text-center mt-2">
+            Only you can delete this expense since you paid for it
+          </p>
+        </div>
+      )}
     </div>
   )
 }
