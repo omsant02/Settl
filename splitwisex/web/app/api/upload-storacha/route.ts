@@ -20,7 +20,9 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    const tempPath = join(tmpdir(), `storacha-upload-${Date.now()}-${file.name}`)
+    const timestamp = Date.now()
+    const uploadedFileName = `storacha-upload-${timestamp}-${file.name}`
+    const tempPath = join(tmpdir(), uploadedFileName)
     await writeFile(tempPath, buffer)
 
     try {
@@ -49,8 +51,8 @@ export async function POST(request: NextRequest) {
 
       // The returned CID is a directory CID, we need to construct the full path to the file
       // Format: {directoryCid}/{filename}
-      const fileName = file.name
-      const fullCidPath = `${directoryCid}/${fileName}`
+      // Use the actual uploaded filename (with timestamp prefix)
+      const fullCidPath = `${directoryCid}/${uploadedFileName}`
 
       console.log('Full IPFS path for direct file access:', fullCidPath)
 
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
         success: true,
         cid: fullCidPath,
         directoryCid: directoryCid,
-        fileName: fileName,
+        fileName: uploadedFileName,
         message: 'File uploaded to IPFS via Storacha'
       })
 

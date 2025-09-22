@@ -24,7 +24,7 @@ const formatTokenAmount = (amount: string, tokenAddress: string): string => {
 export default function ActivityPage() {
   const router = useRouter()
   const params = useParams<{ name: string }>()
-  const name = decodeURIComponent(params.name)
+  const name = params?.name ? decodeURIComponent(params.name) : ''
   const { address: userAddress } = useAccount()
   const { data, loading, error } = useSubgraph<any>(GET_GROUP_BY_NAME(name), [name])
 
@@ -149,19 +149,25 @@ export default function ActivityPage() {
                               {new Date(parseInt(ex.createdAt) * 1000).toLocaleDateString()}
                             </div>
                           </div>
-                          {ex.cid && (
-                            <a
-                              href={ipfsGateway(ex.cid)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-1 text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                              </svg>
-                              View receipt
-                            </a>
-                          )}
+                          {ex.cid && (() => {
+                            // Try the fallback URL first for existing broken receipts
+                            const receiptUrl = ipfsGateway(ex.cid, true)
+                            console.log('Activity Receipt CID:', ex.cid)
+                            console.log('Activity Receipt URL (with fix):', receiptUrl)
+                            return (
+                              <a
+                                href={receiptUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-1 text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                </svg>
+                                View receipt
+                              </a>
+                            )
+                          })()}
                         </div>
                       </div>
                     </div>

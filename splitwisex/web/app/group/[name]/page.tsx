@@ -65,12 +65,6 @@ export default function GroupPage() {
     members: Array<{ id: string, ensName?: string }>
   }
   
-  // Define type for expense form
-  interface GroupData {
-    id: string
-    name: string
-    members: Array<{ id: string, ensName?: string }>
-  }
 
   // Get the group ID from the fetched group data
   const groupData = data?.groups?.[0]
@@ -82,7 +76,7 @@ export default function GroupPage() {
   const groupId = group?.id
 
   const { data: expensesData, loading: expensesLoading } = useSubgraph<any>(GET_EXPENSES(groupId || ''), [groupId])
-  const { data: debtsData, loading: debtsLoading } = useSubgraph<any>(GET_DEBTS(groupId || ''), [groupId])
+  const { data: debtsData } = useSubgraph<any>(GET_DEBTS(groupId || ''), [groupId])
 
   if (loading) return <div>Loading...</div>
 
@@ -130,11 +124,10 @@ export default function GroupPage() {
   const myDebts = debts.filter((d: DebtEdge) => d.debtor.id.toLowerCase() === userAddress?.toLowerCase())
   const othersOweMe = debts.filter((d: DebtEdge) => d.creditor.id.toLowerCase() === userAddress?.toLowerCase())
   
-  // Calculate net debt
-  let netDebtAmount = 0
+  // Calculate main creditor
   let mainCreditor: any = null
   let mainCreditorAmount = 0
-  
+
   if (myDebts.length > 0) {
     // Find the person I owe the most to
     const byCreditor = myDebts.reduce((acc: Record<string, Creditor>, debt: DebtEdge) => {
@@ -147,14 +140,14 @@ export default function GroupPage() {
           usdValue: 0
         }
       }
-      
+
       const usdValue = getUSDValue(debt.amount, debt.token)
       acc[creditorId].usdValue += usdValue
       acc[creditorId].amount += Number(debt.amount)
-      
+
       return acc
     }, {} as Record<string, Creditor>)
-    
+
     // Find main creditor (who I owe the most to)
     const creditors = Object.values(byCreditor) as Creditor[]
     creditors.forEach((creditor) => {
@@ -163,9 +156,6 @@ export default function GroupPage() {
         mainCreditorAmount = creditor.usdValue
       }
     })
-    
-    // Calculate total debt in USD
-    netDebtAmount = myDebts.reduce((sum: number, debt: DebtEdge) => sum + getUSDValue(debt.amount, debt.token), 0)
   }
 
   return (
@@ -192,12 +182,17 @@ export default function GroupPage() {
         
         {/* Settings button */}
         <div className="absolute top-4 right-4">
-          <button className="p-2">
+          <Link href="/settings" className="p-2 inline-block">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-          </button>
+          </Link>
+        </div>
+        
+        {/* Group Name in Header */}
+        <div className="absolute bottom-8 left-0 right-0 text-center text-white z-20">
+          <h1 className="text-3xl font-bold">{g.name || `Group #${g.id}`}</h1>
         </div>
         
         {/* Group icon */}
@@ -212,33 +207,8 @@ export default function GroupPage() {
 
       {/* Group Info */}
       <div className="flex-1 overflow-auto">
-        {/* Group Name */}
-        <div className="text-center mt-16 mb-2">
-          <h1 className="text-2xl font-medium text-gray-800">{g.name || `Group #${g.id}`}</h1>
-        </div>
-        
-        {/* Debt Summary */}
-        <div className="text-center mb-6">
-          {!isAllSettledUp ? (
-            mainCreditor ? (
-              <p className="text-lg">
-                <ENSName address={mainCreditor?.address || ''} /> owes you
-                <span className="text-emerald-500 font-semibold"> ${mainCreditorAmount.toFixed(2)}</span>
-              </p>
-            ) : othersOweMe.length > 0 ? (
-              <p className="text-lg">
-                <span className="text-lg">
-                  <ENSName address={othersOweMe[0]?.debtor?.id || ''} /> owes you
-                  <span className="text-emerald-500 font-semibold"> ${othersOweMe.length > 0 ? getUSDValue(othersOweMe[0]?.amount || '0', othersOweMe[0]?.token || '').toFixed(2) : '0.00'}</span>
-                </span>
-              </p>
-            ) : (
-              <p className="text-lg text-gray-600">No debts in this group</p>
-            )
-          ) : (
-            <p className="text-lg text-green-600">All settled up!</p>
-          )}
-        </div>
+        {/* Spacer to account for header icon */}
+        <div className="h-16"></div>
         
         {/* Action Buttons */}
         <div className="flex justify-between px-4 mb-8">
@@ -356,35 +326,37 @@ export default function GroupPage() {
                             const sharePerMember = totalAmount / memberCount
                             
                             return (
-                              <div key={ex.id} className="flex items-center gap-3 mb-4">
-                                {/* Date */}
-                                <div className="text-center">
-                                  <div className="text-gray-500">{date.month}</div>
-                                  <div className="text-2xl font-semibold">{String(date.day).padStart(2, '0')}</div>
-                                </div>
-                                
-                                {/* Category icon */}
-                                <div className={`w-12 h-12 ${iconBgColor} rounded-md flex items-center justify-center`}>
-                                  {icon}
-                                </div>
-                                
-                                {/* Transaction details */}
-                                <div className="flex-1">
-                                  <div className="font-medium">{ex.memo || 'Expense'}</div>
-                                  <div className="text-sm text-gray-600">
-                                    <ENSName address={ex.payer.id} /> paid {formatTokenAmount(ex.amount, ex.token)}
+                              <Link key={ex.id} href={`/group/${encodeURIComponent(name)}/expense/${ex.id}`}>
+                                <div className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors">
+                                  {/* Date */}
+                                  <div className="text-center">
+                                    <div className="text-gray-500">{date.month}</div>
+                                    <div className="text-2xl font-semibold">{String(date.day).padStart(2, '0')}</div>
+                                  </div>
+
+                                  {/* Category icon */}
+                                  <div className={`w-12 h-12 ${iconBgColor} rounded-md flex items-center justify-center`}>
+                                    {icon}
+                                  </div>
+
+                                  {/* Transaction details */}
+                                  <div className="flex-1">
+                                    <div className="font-medium">{ex.memo || 'Expense'}</div>
+                                    <div className="text-sm text-gray-600">
+                                      <ENSName address={ex.payer.id} /> paid {formatTokenAmount(ex.amount, ex.token)}
+                                    </div>
+                                  </div>
+
+                                  {/* Amount borrowed/lent */}
+                                  <div className="text-right">
+                                    {isPayer ? (
+                                      <div className="text-green-600 font-medium">you lent<br />${(totalAmount - sharePerMember).toFixed(2)}</div>
+                                    ) : (
+                                      <div className="text-orange-600 font-medium">you borrowed<br />${sharePerMember.toFixed(2)}</div>
+                                    )}
                                   </div>
                                 </div>
-                                
-                                {/* Amount borrowed/lent */}
-                                <div className="text-right">
-                                  {isPayer ? (
-                                    <div className="text-green-600 font-medium">you lent<br />${(totalAmount - sharePerMember).toFixed(2)}</div>
-                                  ) : (
-                                    <div className="text-orange-600 font-medium">you borrowed<br />${sharePerMember.toFixed(2)}</div>
-                                  )}
-                                </div>
-                              </div>
+                              </Link>
                             )
                           })}
                         </div>
@@ -424,13 +396,13 @@ export default function GroupPage() {
             </svg>
             <span className="text-xs">Groups</span>
           </Link>
-          <Link href="#" className="flex flex-col items-center text-gray-400">
+          <Link href={`/group/${encodeURIComponent(name)}/activity`} className="flex flex-col items-center text-gray-400">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
             <span className="text-xs">Activity</span>
           </Link>
-          <Link href="#" className="flex flex-col items-center text-gray-400">
+          <Link href="/account" className="flex flex-col items-center text-gray-400">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>

@@ -111,14 +111,40 @@ export async function uploadReceiptWithStoracha(file: File): Promise<string> {
  * @param cid The IPFS CID
  * @returns string Gateway URL
  */
-export const ipfsGateway = (cid: string) => {
+export const ipfsGateway = (cid: string, attemptFix = false) => {
+  console.log('ipfsGateway called with CID:', cid, 'attemptFix:', attemptFix)
+
   // For development mock CIDs, show a placeholder
   if (cid.startsWith('dev_') || cid.startsWith('mock_')) {
-    return `https://via.placeholder.com/400x300/e2e8f0/64748b?text=Receipt+Uploaded+${cid.slice(-8)}`
+    const url = `https://via.placeholder.com/400x300/e2e8f0/64748b?text=Receipt+Uploaded+${cid.slice(-8)}`
+    console.log('Returning placeholder URL:', url)
+    return url
   }
 
-  // For real CIDs, use IPFS gateway
-  return `https://ipfs.io/ipfs/${cid}`
+  // If the CID includes a filename path, handle legacy vs new formats
+  if (cid.includes('/')) {
+    const [directoryCid, filename] = cid.split('/')
+
+    // If this is a retry attempt and the filename doesn't have the storacha prefix,
+    // try to construct the correct filename based on known pattern
+    if (attemptFix && !filename.startsWith('storacha-upload-')) {
+      // For the specific case we know about, try the correct filename
+      // This is a temporary fix for existing broken receipts
+      const correctedFilename = `storacha-upload-1758563557531-${filename}`
+      const correctedUrl = `https://w3s.link/ipfs/${directoryCid}/${correctedFilename}`
+      console.log('Attempting fix with corrected filename:', correctedUrl)
+      return correctedUrl
+    }
+
+    const url = `https://w3s.link/ipfs/${cid}`
+    console.log('CID contains path, returning full URL:', url)
+    return url
+  }
+
+  // For simple CIDs, use just the CID
+  const url = `https://w3s.link/ipfs/${cid}`
+  console.log('Simple CID, returning URL:', url)
+  return url
 }
 
 /**

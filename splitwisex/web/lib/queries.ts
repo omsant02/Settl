@@ -18,6 +18,12 @@ export const GET_EXPENSES = (groupId: string) => `
     id payer { id } token amount cid memo createdAt
 } }`
 
+export const GET_EXPENSE_BY_ID = (expenseId: string) => `
+{ expenses(where: { id: "${expenseId}" }, first: 1) {
+    id payer { id } token amount cid memo createdAt
+    group { id members { id ensName } }
+} }`
+
 export const GET_DEBTS = (groupId: string) => `
 { debtEdges(where:{ group: "${groupId}", open: true }) {
     id debtor { id } creditor { id } token amount open
