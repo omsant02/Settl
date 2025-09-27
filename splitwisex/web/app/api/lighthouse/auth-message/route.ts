@@ -1,35 +1,70 @@
+/**
+ * API route to get authentication message from Lighthouse
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import kavach from '@lighthouse-web3/kavach';
+
+const LIGHTHOUSE_SERVICE_URL = process.env.LIGHTHOUSE_SERVICE_URL || 'http://localhost:3002'; // Updated to port 3003
+
+// Handle CORS preflight
+export async function OPTIONS(request: NextRequest) {
+  return NextResponse.json({}, { 
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { publicKey } = await request.json();
-
+    const body = await request.json();
+    const { publicKey } = body;
+    
     if (!publicKey) {
       return NextResponse.json(
-        { error: 'Public key is required' },
+        { success: false, error: 'Public key is required' },
         { status: 400 }
       );
     }
-
-    // Use kavach for proper JWT authentication (compatible with Node.js encryption)
-    const authMessage = await kavach.getAuthMessage(publicKey);
-
-    if (!authMessage.message) {
+    
+    console.log('📋 API Route: Getting auth message for:', publicKey);
+    
+    // Call Lighthouse service to get auth message
+    const response = await fetch(`${LIGHTHOUSE_SERVICE_URL}/auth-message/${publicKey}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      console.error('❌ API Route: Failed to get auth message:', response.status, response.statusText);
       return NextResponse.json(
-        { error: 'Failed to get auth message from Kavach' },
-        { status: 500 }
+        { success: false, error: `Failed to get auth message: ${response.statusText}` },
+        { status: response.status }
       );
     }
-
-    return NextResponse.json({
-      message: authMessage.message
+    
+    const data = await response.json();
+    console.log('✅ API Route: Auth message retrieved');
+    
+    const jsonResponse = NextResponse.json({
+      success: true,
+      message: data.message
     });
-
+    
+    // Add CORS headers
+    jsonResponse.headers.set('Access-Control-Allow-Origin', '*');
+    return jsonResponse;
+    
   } catch (error) {
-    console.error('Auth message API error:', error);
+    console.error('❌ API Route: Auth message error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get auth message' },
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

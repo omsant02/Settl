@@ -11,12 +11,14 @@
   },
   "dependencies": {
     "@lighthouse-web3/kavach": "^0.1.9",
-    "@lighthouse-web3/sdk": "^0.2.7",
+    "@lighthouse-web3/sdk": "^0.4.2",
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",
     "ethers": "^6.7.1",
     "express": "^4.18.2",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2",
+    "tmp": "^0.2.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.13",

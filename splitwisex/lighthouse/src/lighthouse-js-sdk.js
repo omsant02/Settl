@@ -12,10 +12,35 @@ const uploadEncrypted = async (filePath, publicKey, signedMessage) => {
     console.log('🔑 File Owner (publicKey):', publicKey);
     console.log('📝 Signed Message Length:', signedMessage.length);
     console.log('📄 File Path:', filePath);
-
+    
+    // Try direct buffer upload first if available
+    try {
+      console.log('🔄 Attempting buffer-based upload if available...');
+      // Check if file exists and read as buffer
+      const fs = await import('fs/promises');
+      const fileBuffer = await fs.readFile(filePath);
+      
+      // Try uploadEncryptedData if available (newer SDK versions)
+      if (lighthouse.uploadEncryptedData) {
+        console.log('✅ Using buffer-based encryption method');
+        const response = await lighthouse.uploadEncryptedData(
+          fileBuffer,
+          LIGHTHOUSE_API_KEY,
+          publicKey,
+          signedMessage
+        );
+        return response;
+      } else {
+        console.log('⚠️ Buffer-based upload not available, falling back to file path method');
+      }
+    } catch (bufferErr) {
+      console.log('⚠️ Buffer method failed, falling back to file path:', bufferErr.message);
+    }
+    
     // Browser method signature: uploadEncrypted(file, apiKey, userAddress, signature)
     // publicKey = user's wallet address (file owner)
     // signedMessage = user's signature (authentication)
+    console.log('📄 Using file path method with path:', filePath);
     const response = await lighthouse.uploadEncrypted(
       filePath,
       LIGHTHOUSE_API_KEY,

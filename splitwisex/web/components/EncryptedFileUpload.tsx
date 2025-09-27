@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
+import lighthouse from '@lighthouse-web3/sdk';
 
 interface UploadResult {
   success: boolean;
@@ -24,6 +25,26 @@ export default function EncryptedFileUpload() {
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [enableEncryption, setEnableEncryption] = useState(true);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+
+  // Fetch API key when component mounts
+  useEffect(() => {
+    const fetchApiKey = async () => {
+      try {
+        const response = await fetch('/api/lighthouse/get-api-key');
+        const data = await response.json();
+        if (data.success && data.apiKey) {
+          setApiKey(data.apiKey);
+        } else {
+          console.error('Failed to get API key:', data.error);
+        }
+      } catch (error) {
+        console.error('Error fetching API key:', error);
+      }
+    };
+
+    fetchApiKey();
+  }, []);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -45,16 +66,149 @@ export default function EncryptedFileUpload() {
       return;
     }
 
+    if (!apiKey) {
+      setUploadStatus('❌ API key not available. Please try again.');
+      return;
+    }
+
     setIsUploading(true);
+
+    try {
+      if (enableEncryption) {
+        await handleEncryptedUpload();
+      } else {
+        await handleRegularUpload();
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+      setUploadStatus(`❌ ${errorMsg}`);
+      console.error('Upload error:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleEncryptedUpload = async () => {
+    if (!selectedFile || !address || !isConnected || !apiKey) {
+      return;
+    }
+
+    try {
+      setUploadStatus('Getting authentication message...');
+
+      // Step 1: Get auth message for signing (directly from lighthouse SDK)
+      const authMessage = await lighthouse.getAuthMessage(address);
+      
+      if (!authMessage.data?.message) {
+        throw new Error('Failed to get authentication message');
+      }
+
+      setUploadStatus('Please sign the message in your wallet...');
+
+      // Step 2: Sign the auth message
+      const signedMessage = await signMessageAsync({ 
+        message: authMessage.data.message 
+      });
+
+      setUploadStatus('Encrypting and uploading file directly from browser...');
+
+      // Step 3: Browser-side encryption and upload
+      const uploadResponse = await lighthouse.uploadEncrypted(
+        selectedFile,
+        apiKey,
+        address,
+        signedMessage
+      );
+
+      console.log('Browser-side encryption response:', uploadResponse);
+
+      // Handle response based on structure
+      if (uploadResponse.data) {
+        // Convert response to our UploadResult format
+        const fileData = Array.isArray(uploadResponse.data) ? uploadResponse.data[0] : uploadResponse.data;
+        // Handle different possible property names for the hash/CID
+        const hash = fileData.Hash || 
+                    (fileData as any).hash || 
+                    (fileData as any).cid;
+
+        if (hash) {
+          const result: UploadResult = {
+            success: true,
+            hash,
+            name: selectedFile.name,
+            size: selectedFile.size,
+            encrypted: true,
+            publicKey: address,
+            note: 'File encrypted and uploaded directly from browser'
+          };
+
+          setUploadResult(result);
+          setUploadStatus('✅ File encrypted and uploaded successfully!');
+        } else {
+          throw new Error('No hash returned from upload');
+        }
+      } else {
+        throw new Error('Invalid response from Lighthouse SDK');
+      }
+
+    } catch (error) {
+      console.error('Browser-side encryption failed:', error);
+      
+      // Try server-side fallback if browser-side fails
+      setUploadStatus('Browser encryption failed, trying server-side encryption...');
+      await fallbackToServerSideUpload(true);
+    }
+  };
+
+  const handleRegularUpload = async () => {
+    if (!selectedFile || !apiKey) {
+      return;
+    }
+
+    try {
+      setUploadStatus('Uploading file directly from browser...');
+      
+      // Direct browser-side upload without encryption
+      const uploadResponse = await lighthouse.upload(
+        selectedFile, 
+        apiKey
+      );
+
+      console.log('Browser-side upload response:', uploadResponse);
+
+      if (uploadResponse.data?.Hash) {
+        const result: UploadResult = {
+          success: true,
+          hash: uploadResponse.data.Hash,
+          name: selectedFile.name,
+          size: selectedFile.size,
+          encrypted: false,
+          note: 'File uploaded directly from browser'
+        };
+
+        setUploadResult(result);
+        setUploadStatus('✅ File uploaded successfully!');
+      } else {
+        throw new Error('No hash returned from upload');
+      }
+    } catch (error) {
+      console.error('Browser-side upload failed:', error);
+      
+      // Fallback to server-side upload
+      setUploadStatus('Browser upload failed, trying server-side upload...');
+      await fallbackToServerSideUpload(false);
+    }
+  };
+
+  const fallbackToServerSideUpload = async (encrypted: boolean) => {
+    if (!selectedFile) return;
 
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      if (enableEncryption) {
-        setUploadStatus('Getting authentication message...');
-
-        // Step 1: Get auth message for signing (following Lighthouse docs)
+      if (encrypted && address && isConnected) {
+        // Get auth message for signing
         const authResponse = await fetch('/api/lighthouse/auth-message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -66,23 +220,21 @@ export default function EncryptedFileUpload() {
         }
 
         const { message } = await authResponse.json();
-        setUploadStatus('Please sign the message in your wallet...');
-
-        // Step 2: Sign the auth message (following browser method from docs)
+        
+        // Sign the auth message
         const signedMessage = await signMessageAsync({ message });
-        setUploadStatus('Encrypting and uploading file...');
-
+        
         // Add encryption parameters
         formData.append('publicKey', address);
         formData.append('signedMessage', signedMessage);
         formData.append('encrypted', 'true');
       } else {
-        setUploadStatus('Uploading file...');
         formData.append('encrypted', 'false');
       }
 
-      // Upload to the lighthouse service using existing upload-lighthouse route
-      const uploadResponse = await fetch('/api/upload-lighthouse', {
+      // Upload using the server as a proxy
+      setUploadStatus('Uploading via server...');
+      const uploadResponse = await fetch('/api/lighthouse/upload', {
         method: 'POST',
         body: formData
       });
@@ -90,26 +242,15 @@ export default function EncryptedFileUpload() {
       const result: UploadResult = await uploadResponse.json();
 
       if (result.success) {
-        const successMessage = enableEncryption
-          ? '✅ File encrypted and uploaded successfully!'
-          : '✅ File uploaded successfully!';
-        setUploadStatus(successMessage);
+        setUploadStatus(
+          encrypted ? '✅ File encrypted and uploaded via server!' : '✅ File uploaded via server!'
+        );
         setUploadResult(result);
-
-        // Show decrypt URL for encrypted files
-        if (enableEncryption && result.hash) {
-          console.log(`Decrypt at https://decrypt.mesh3.network/evm/${result.hash}`);
-        }
       } else {
-        setUploadStatus(`❌ Upload failed: ${result.error}`);
+        throw new Error(result.error || 'Server-side upload failed');
       }
-
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Upload failed';
-      setUploadStatus(`❌ ${errorMsg}`);
-      console.error('Upload error:', error);
-    } finally {
-      setIsUploading(false);
+      throw new Error(`Server fallback failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -129,7 +270,7 @@ export default function EncryptedFileUpload() {
       </h3>
       <p className="text-gray-600 text-sm mb-6">
         {enableEncryption
-          ? 'Files are encrypted at your end using BLS cryptography before upload to Filecoin'
+          ? 'Files are encrypted in your browser using BLS cryptography before upload to Filecoin'
           : 'Files are uploaded directly to Filecoin via Lighthouse'
         }
       </p>
@@ -190,12 +331,14 @@ export default function EncryptedFileUpload() {
               <p><strong>Owner:</strong> {isConnected ? address : 'Not connected'}</p>
               <p><strong>Encryption:</strong> BLS with 5-node key splitting</p>
               <p><strong>Storage:</strong> Filecoin via Lighthouse</p>
+              <p><strong>Method:</strong> Browser-side encryption (with server fallback)</p>
             </>
           ) : (
             <>
               <p><strong>Encryption:</strong> None (public file)</p>
               <p><strong>Storage:</strong> Filecoin via Lighthouse</p>
               <p><strong>Access:</strong> Anyone with CID can view</p>
+              <p><strong>Method:</strong> Browser-side upload (with server fallback)</p>
             </>
           )}
         </div>
@@ -204,7 +347,7 @@ export default function EncryptedFileUpload() {
       {/* Upload Button */}
       <button
         onClick={handleFileUpload}
-        disabled={isUploading || !selectedFile || (enableEncryption && !isConnected)}
+        disabled={isUploading || !selectedFile || (enableEncryption && !isConnected) || !apiKey}
         className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold"
       >
         {isUploading
@@ -251,7 +394,7 @@ export default function EncryptedFileUpload() {
             </div>
 
             {/* Decrypt URL */}
-            {uploadResult.hash && (
+            {uploadResult.encrypted && uploadResult.hash && (
               <div className="bg-blue-50 p-3 rounded border">
                 <p className="font-semibold text-blue-800 mb-1">Decrypt URL:</p>
                 <div className="flex justify-between items-center">
@@ -304,7 +447,7 @@ export default function EncryptedFileUpload() {
         <ul className="list-disc list-inside space-y-1">
           {enableEncryption ? (
             <>
-              <li>Files are encrypted client-side before upload</li>
+              <li>Files are encrypted in your browser before upload</li>
               <li>Encryption key is split into 5 parts using BLS cryptography</li>
               <li>Key parts are stored on separate Lighthouse nodes</li>
               <li>Only you (the file owner) can decrypt or share access</li>
