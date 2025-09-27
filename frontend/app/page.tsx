@@ -51,10 +51,10 @@ export default function HomePage() {
       <main className="flex-1 pt-20">
         <div className="relative min-h-[calc(100vh-12rem)] flex items-center justify-center px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
-            <h1 className="font-delius font-bold text-4xl md:text-6xl text-foreground mb-6 text-balance">
-              Split expenses, transparently. On-chain, for everyone.
+            <h1 className="font-bold text-4xl md:text-6xl text-foreground mb-6 text-balance">
+              Split expenses, transparently. Cross-Chain, for everyone.
             </h1>
-            <h2 className="font-comic-neue text-xl md:text-2xl text-muted-foreground mb-6 text-pretty">
+            <h2 className="text-xl md:text-2xl text-muted-foreground mb-6 text-pretty">
               Track, settle, and share expenses seamlessly with blockchain-powered transparency.
             </h2>
             <div>

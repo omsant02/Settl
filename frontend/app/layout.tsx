@@ -1,38 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { Architects_Daughter } from "next/font/google";
-import { Delius } from "next/font/google";
-import { Comic_Neue } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const architectsDaughter = Architects_Daughter({
-  variable: "--font-architects-daughter",
-  weight: "400",
-  subsets: ["latin"],
-});
-
-const delius = Delius({
-  variable: "--font-delius",
-  weight: "400",
-  subsets: ["latin"],
-});
-
-const comicNeue = Comic_Neue({
-  variable: "--font-comic-neue",
-  weight: ["300", "400", "700"],
-  style: ["normal", "italic"],
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -45,10 +14,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${architectsDaughter.variable} ${delius.variable} ${comicNeue.variable}`}
-    >
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Alan+Sans:wght@300..900&family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

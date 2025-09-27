@@ -125,13 +125,10 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-architects-daughter), var(--font-geist-sans);
+    font-family: "Alan Sans", sans-serif;
   }
-  h1 {
-    font-family: var(--font-architects-daughter);
-  }
-  h2 {
-    font-family: var(--font-kalam);
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Alan Sans", sans-serif;
   }
 }
 
