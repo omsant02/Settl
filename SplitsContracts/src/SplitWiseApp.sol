@@ -3,24 +3,13 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
-// ENS Interfaces for Sepolia
 interface ENS {
     function owner(bytes32 node) external view returns (address);
     function resolver(bytes32 node) external view returns (address);
-}
-
-interface INameWrapper {
-    function setSubnodeOwner(
-        bytes32 parentNode,
-        string memory label, 
-        address owner,
-        uint32 fuses,
-        uint64 expiry
-    ) external returns (bytes32);
-    
+    function setSubnodeOwner(bytes32 node, bytes32 label, address owner) external returns (bytes32);
     function setResolver(bytes32 node, address resolver) external;
+    function setOwner(bytes32 node, address owner) external;
 }
 
 interface IAddrResolver {
@@ -30,30 +19,26 @@ interface IAddrResolver {
 
 interface IReverseRegistrar {
     function setName(string memory name) external returns (bytes32);
-    function node(address addr) external pure returns (bytes32);
 }
 
 /**
  * @title SplitWiseApp
  * @dev A Web3 expense splitting app with ENS subdomain integration
  * @notice Users get alice.settl.eth subdomains and can split expenses by ENS names
+ * Supports both direct user registration and backend-managed registration
  */
-contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
+contract SplitWiseApp is Ownable, ReentrancyGuard {
     
-    // Sepolia ENS Contract Addresses
     ENS public constant ensRegistry = ENS(0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e);
-    INameWrapper public constant nameWrapper = INameWrapper(0x0635513f179D50A207757E05759CbD106d7dFcE8);
     IAddrResolver public constant publicResolver = IAddrResolver(0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5);
     IReverseRegistrar public constant reverseRegistrar = IReverseRegistrar(0x4F382928805ba0e23B30cFB75fC9E848e82DFD47);
     
-    bytes32 public rootNode; // namehash for settl.eth
+    bytes32 public rootNode;
     
-    // ENS Integration Layer
     mapping(address => string) public userSubdomains;
     mapping(string => address) public subdomainToAddress;
     mapping(bytes32 => bool) public subdomainExists;
     
-    // Core Data Structures
     struct User {
         string subdomain;
         bool registered;
@@ -81,7 +66,7 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
         uint256 totalAmount;
         string description;
         string category;
-        string receiptHash; // IPFS hash from Lighthouse
+        string receiptHash;
         bool fullySettled;
         uint256 timestamp;
     }
@@ -97,13 +82,12 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
         address from;
         address to;
         uint256 amount;
-        string txHash; // 1inch Fusion transaction hash
+        string txHash; 
         string fromToken;
         string toToken;
         uint256 timestamp;
     }
     
-    // Storage
     mapping(address => User) public users;
     mapping(uint256 => Group) public groups;
     mapping(uint256 => Expense) public expenses;
@@ -111,11 +95,9 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
     mapping(uint256 => Settlement[]) public expenseSettlements;
     mapping(address => mapping(address => uint256)) public balances;
     
-    // Counters
     uint256 public nextGroupId = 1;
     uint256 public nextExpenseId = 1;
     
-    // Events
     event UserRegistered(address indexed user, string subdomain, string ensName);
     event GroupCreated(uint256 indexed groupId, string name, address indexed creator, string[] memberSubdomains);
     event ExpenseAdded(uint256 indexed expenseId, uint256 indexed groupId, address indexed paidBy, uint256 amount, string description);
@@ -137,6 +119,9 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
         _;
     }
     
+    /**
+     * @dev Direct user registration - for when user has ENS permissions
+     */
     function registerUser(string memory subdomain) 
         external 
         validSubdomain(subdomain)
@@ -145,27 +130,45 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
         require(!users[msg.sender].registered, "User already registered");
         require(_isValidSubdomainFormat(subdomain), "Invalid subdomain format");
         
-        // Create subdomain using NameWrapper (for wrapped domains)
-        bytes32 createdSubnode = nameWrapper.setSubnodeOwner(
+        _createUserSubdomain(subdomain, msg.sender);
+    }
+    
+    /**
+     * @dev Backend-managed registration - owner can register for any user
+     * This function should be called by your backend service
+     */
+    function adminRegisterUser(string memory subdomain, address user) 
+        external 
+        onlyOwner
+        validSubdomain(subdomain)
+        nonReentrant
+    {
+        require(!users[user].registered, "User already registered");
+        require(_isValidSubdomainFormat(subdomain), "Invalid subdomain format");
+        
+        _createUserSubdomain(subdomain, user);
+    }
+    
+    /**
+     * @dev Internal function to create subdomain and register user
+     */
+    function _createUserSubdomain(string memory subdomain, address user) internal {
+        // Create subdomain using ENS Registry
+        bytes32 labelhash = keccak256(abi.encodePacked(subdomain));
+        bytes32 createdSubnode = ensRegistry.setSubnodeOwner(
             rootNode,
-            subdomain,
-            msg.sender,
-            0,  // No fuses burned
-            0   // Use parent's expiry
+            labelhash,
+            user
         );
         
-        // Set resolver for the subdomain
-        nameWrapper.setResolver(createdSubnode, address(publicResolver));
+        ensRegistry.setResolver(createdSubnode, address(publicResolver));
         
-        // Set address record in resolver (forward resolution)
-        publicResolver.setAddr(createdSubnode, msg.sender);
+        publicResolver.setAddr(createdSubnode, user);
         
-        // Set reverse resolution (address -> name)
         string memory fullName = string(abi.encodePacked(subdomain, ".settl.eth"));
         reverseRegistrar.setName(fullName);
         
-        // Update our mappings
-        users[msg.sender] = User({
+        users[user] = User({
             subdomain: subdomain,
             registered: true,
             registrationTime: block.timestamp,
@@ -173,12 +176,12 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
             expenseIds: new uint256[](0)
         });
         
-        userSubdomains[msg.sender] = subdomain;
-        subdomainToAddress[subdomain] = msg.sender;
+        userSubdomains[user] = subdomain;
+        subdomainToAddress[subdomain] = user;
         subdomainExists[createdSubnode] = true;
         
-        emit UserRegistered(msg.sender, subdomain, fullName);
-        emit SubdomainCreated(subdomain, msg.sender, createdSubnode);
+        emit UserRegistered(user, subdomain, fullName);
+        emit SubdomainCreated(subdomain, user, createdSubnode);
     }
     
     function createGroup(
@@ -348,7 +351,6 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
         emit ExpenseSettled(expenseId, msg.sender, creditor, amount, fusionTxHash);
     }
     
-    // View Functions
     function getUser(address userAddr) external view returns (
         string memory subdomain,
         bool registered,
@@ -410,7 +412,6 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
         return userSubdomains[user];
     }
     
-    // Internal Functions
     function _isValidSubdomainFormat(string memory subdomain) internal pure returns (bool) {
         bytes memory b = bytes(subdomain);
         for (uint i = 0; i < b.length; i++) {
@@ -434,7 +435,6 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
         return false;
     }
     
-    // Admin Functions
     function updateRootNode(bytes32 newRootNode) external onlyOwner {
         rootNode = newRootNode;
     }
@@ -445,5 +445,19 @@ contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
             "Only group creator or contract owner can deactivate"
         );
         groups[groupId].active = false;
+    }
+    
+    /**
+     * @dev Transfer ENS domain ownership (admin function)
+     */
+    function transferDomainOwnership(address newOwner) external onlyOwner {
+        ensRegistry.setOwner(rootNode, newOwner);
+    }
+    
+    /**
+     * @dev Emergency function to withdraw any ETH sent to contract
+     */
+    function withdrawETH() external onlyOwner {
+        payable(owner()).transfer(address(this).balance);
     }
 }
