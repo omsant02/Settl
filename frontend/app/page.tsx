@@ -40,7 +40,6 @@ export default function HomePage() {
     <div className="min-h-screen bg-background relative">
       <CardNav
         logoText="Settl"
-        logoAlt="Settl Logo"
         items={navItems}
         baseColor="hsl(var(--background))"
         menuColor="hsl(var(--foreground))"
@@ -49,19 +48,19 @@ export default function HomePage() {
       />
 
       {/* Hero Section */}
-      <main className="flex-1 pt-32">
-        <div className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 sm:px-6 lg:px-8">
+      <main className="flex-1 pt-20">
+        <div className="relative min-h-[calc(100vh-12rem)] flex items-center justify-center px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
-            <h1 className="font-sans font-bold text-4xl md:text-6xl text-foreground mb-6 text-balance">
+            <h1 className="font-delius font-bold text-4xl md:text-6xl text-foreground mb-6 text-balance">
               Split expenses, transparently. On-chain, for everyone.
             </h1>
-            <h2 className="font-sans text-xl md:text-2xl text-muted-foreground mb-8 text-pretty">
+            <h2 className="font-comic-neue text-xl md:text-2xl text-muted-foreground mb-6 text-pretty">
               Track, settle, and share expenses seamlessly with blockchain-powered transparency.
             </h2>
             <div>
               <Button
                 size="lg"
-                className="bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:from-primary/90 hover:to-secondary/90 hover:scale-105 rounded-xl shadow-lg transition-all duration-300 px-8 py-4 text-lg font-medium group"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 rounded-xl shadow-lg transition-all duration-300 px-8 py-4 text-lg font-medium group"
               >
                 <Wallet className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
                 Connect Wallet

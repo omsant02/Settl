@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useRef, useState } from "react"
-import { ArrowUpRight, Zap } from "lucide-react"
+import { ArrowUpRight } from "lucide-react"
 import "./CardNav.css"
 
 type CardNavLink = {
@@ -20,7 +20,6 @@ export type CardNavItem = {
 
 export interface CardNavProps {
   logoText: string
-  logoAlt?: string
   items: CardNavItem[]
   className?: string
   ease?: string
@@ -32,7 +31,6 @@ export interface CardNavProps {
 
 const CardNav: React.FC<CardNavProps> = ({
   logoText,
-  logoAlt = "Logo",
   items,
   className = "",
   ease = "power3.out",
@@ -85,10 +83,7 @@ const CardNav: React.FC<CardNavProps> = ({
             <div className="hamburger-line" />
           </div>
 
-          <div className="logo-container">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-md flex items-center justify-center">
-              <Zap className="w-5 h-5 text-primary-foreground" />
-            </div>
+          <div className="logo-container flex-1 flex justify-center">
             <span className="logo text-2xl font-bold">{logoText}</span>
           </div>
 
