@@ -12,6 +12,7 @@ const mockENSNames: Record<string, string> = {
   '0x976ea74026e726554db657fa54763abd0c3a0aa9': 'frank.eth',
   '0x14dc79964da2c08b23698b3d3cc7ca32193d9955': 'grace.eth',
   '0x23618e81e3f5cdf7f54c3d65f7fbc0abf5b21e8f': 'henry.eth',
+  '0xd56262e586e79b246017ed83f95e157f5aab8039': 'bob.eth', // Added the recipient address
 }
 
 // Mock avatars for test addresses
@@ -74,5 +75,3 @@ export async function ensAvatar(nameOrAddr: string) {
     return null
   }
 }
-
-

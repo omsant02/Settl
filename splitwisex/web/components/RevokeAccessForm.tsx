@@ -3,51 +3,51 @@
 import { useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 
-interface ShareFileFormProps {
+interface RevokeAccessFormProps {
   fileHash: string;
-  onShareComplete?: (result: any) => void;
+  onRevokeComplete?: (result: any) => void;
 }
 
-export default function ShareFileForm({ fileHash, onShareComplete }: ShareFileFormProps) {
-  const [recipientAddress, setRecipientAddress] = useState<string>('');
-  const [isSharing, setIsSharing] = useState<boolean>(false);
-  const [shareError, setShareError] = useState<string | null>(null);
-  const [shareSuccess, setShareSuccess] = useState<boolean>(false);
-  const [shareResult, setShareResult] = useState<any>(null);
+export default function RevokeAccessForm({ fileHash, onRevokeComplete }: RevokeAccessFormProps) {
+  const [addressToRevoke, setAddressToRevoke] = useState<string>('');
+  const [isRevoking, setIsRevoking] = useState<boolean>(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [revokeSuccess, setRevokeSuccess] = useState<boolean>(false);
+  const [revokeResult, setRevokeResult] = useState<any>(null);
 
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
-  const handleShare = async (e: React.FormEvent) => {
+  const handleRevoke = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!isConnected || !address) {
-      setShareError('Please connect your wallet to share files');
+      setRevokeError('Please connect your wallet to revoke access');
       return;
     }
     
     if (!fileHash) {
-      setShareError('No file selected to share');
+      setRevokeError('No file selected');
       return;
     }
     
-    if (!recipientAddress || !recipientAddress.startsWith('0x')) {
-      setShareError('Please enter a valid Ethereum address');
+    if (!addressToRevoke || !addressToRevoke.startsWith('0x')) {
+      setRevokeError('Please enter a valid Ethereum address');
       return;
     }
     
-    setIsSharing(true);
-    setShareError(null);
-    setShareSuccess(false);
-    setShareResult(null);
+    setIsRevoking(true);
+    setRevokeError(null);
+    setRevokeSuccess(false);
+    setRevokeResult(null);
     
     try {
-      console.log('🔗 Sharing file:', fileHash);
+      console.log('🚫 Revoking access for file:', fileHash);
       console.log('👤 Owner:', address);
-      console.log('🔄 Sharing with:', recipientAddress);
+      console.log('🔄 Revoking access from:', addressToRevoke);
       
       // Step 1: Get authentication message
-      console.log('📋 Getting auth message for sharing...');
+      console.log('📋 Getting auth message for revocation...');
       const authMessageResponse = await fetch('/api/lighthouse/auth-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,8 +59,6 @@ export default function ShareFileForm({ fileHash, onShareComplete }: ShareFileFo
       }
       
       const authMessageData = await authMessageResponse.json();
-      console.log('📋 Auth message response:', authMessageData);
-      
       if (!authMessageData.success && !authMessageData.message) {
         throw new Error(authMessageData.error || 'Failed to get auth message');
       }
@@ -69,68 +67,61 @@ export default function ShareFileForm({ fileHash, onShareComplete }: ShareFileFo
                          (authMessageData.data && authMessageData.data.message) || 
                          'Failed to get auth message';
                          
-      console.log('📝 Auth message to sign for sharing:', messageToSign);
+      console.log('📝 Auth message to sign for revocation:', messageToSign);
       
       // Step 2: Sign the message with user's wallet
       const signedMessage = await signMessageAsync({
         message: messageToSign
       });
-      console.log('✅ Sharing message signed successfully');
+      console.log('✅ Revocation message signed successfully');
       
-      // Step 3: Share the file
-      console.log('📤 Sending share request to API...');
-      console.log('📤 Share payload:', { 
-        hash: fileHash,
-        publicKey: address,
-        signedMessage,
-        shareAddresses: [recipientAddress]
-      });
-      
-      const shareResponse = await fetch('/api/lighthouse/share', {
+      // Step 3: Revoke access
+      console.log('📤 Sending revoke request to API...');
+      const revokeResponse = await fetch('/api/lighthouse/revoke', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hash: fileHash,
           publicKey: address,
           signedMessage,
-          shareAddresses: [recipientAddress]
+          revokeAddresses: [addressToRevoke]
         })
       });
       
-      if (!shareResponse.ok) {
-        let errorMessage = 'Sharing failed';
+      if (!revokeResponse.ok) {
+        let errorMessage = 'Revocation failed';
         try {
-          const errorData = await shareResponse.json();
-          errorMessage = errorData.error || `Sharing failed with status ${shareResponse.status}`;
+          const errorData = await revokeResponse.json();
+          errorMessage = errorData.error || `Revocation failed with status ${revokeResponse.status}`;
         } catch (e) {
-          errorMessage = `Sharing failed with status ${shareResponse.status}`;
+          errorMessage = `Revocation failed with status ${revokeResponse.status}`;
         }
         throw new Error(errorMessage);
       }
       
-      const result = await shareResponse.json();
-      console.log('✅ File shared successfully:', result);
+      const result = await revokeResponse.json();
+      console.log('✅ Access revoked successfully:', result);
       
-      setShareSuccess(true);
-      setShareResult(result);
+      setRevokeSuccess(true);
+      setRevokeResult(result);
       
-      if (onShareComplete) {
-        onShareComplete(result);
+      if (onRevokeComplete) {
+        onRevokeComplete(result);
       }
       
     } catch (error) {
-      console.error('❌ Sharing failed:', error);
-      setShareError(`Sharing failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('❌ Revocation failed:', error);
+      setRevokeError(`Revocation failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      setIsSharing(false);
+      setIsRevoking(false);
     }
   };
 
   return (
     <div>
-      <h3 className="text-lg font-medium mb-4">Share File Access</h3>
+      <h3 className="text-lg font-medium mb-4">Revoke File Access</h3>
       
-      <form onSubmit={handleShare}>
+      <form onSubmit={handleRevoke}>
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             File CID
@@ -145,45 +136,45 @@ export default function ShareFileForm({ fileHash, onShareComplete }: ShareFileFo
         
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Recipient Wallet Address
+            Address to Revoke Access
           </label>
           <input
             type="text"
-            value={recipientAddress}
-            onChange={(e) => setRecipientAddress(e.target.value)}
+            value={addressToRevoke}
+            onChange={(e) => setAddressToRevoke(e.target.value)}
             placeholder="0x..."
             className="w-full px-3 py-2 border border-gray-300 rounded-md"
             required
           />
           <p className="mt-1 text-xs text-gray-500">
-            Enter the Ethereum address of the recipient
+            Enter the Ethereum address you previously shared this file with
           </p>
         </div>
         
         <button
           type="submit"
-          disabled={isSharing || !isConnected || !fileHash}
+          disabled={isRevoking || !isConnected || !fileHash}
           className={`w-full py-2 px-4 rounded-md font-medium ${
-            isSharing || !isConnected || !fileHash
+            isRevoking || !isConnected || !fileHash
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-red-600 text-white hover:bg-red-700'
           }`}
         >
-          {isSharing ? 'Sharing...' : 'Share File'}
+          {isRevoking ? 'Revoking Access...' : 'Revoke Access'}
         </button>
       </form>
       
-      {shareError && (
+      {revokeError && (
         <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {shareError}
+          {revokeError}
         </div>
       )}
       
-      {shareSuccess && (
+      {revokeSuccess && (
         <div className="mt-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-          <p className="font-semibold">File shared successfully!</p>
+          <p className="font-semibold">Access revoked successfully!</p>
           <p className="text-sm">
-            The file has been shared with {recipientAddress}
+            Access has been revoked for {addressToRevoke}
           </p>
         </div>
       )}

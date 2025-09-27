@@ -1,5 +1,5 @@
 /**
- * API route to share an encrypted file with another wallet address
+ * API route to revoke access to a shared encrypted file
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,44 +23,39 @@ export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body = await request.json();
-    const { hash, publicKey, signedMessage, shareAddresses } = body;
+    const { hash, publicKey, signedMessage, revokeAddresses } = body;
     
-    if (!hash || !publicKey || !signedMessage || !shareAddresses || !Array.isArray(shareAddresses)) {
+    if (!hash || !publicKey || !signedMessage || !revokeAddresses || !Array.isArray(revokeAddresses)) {
       return addCorsHeaders(NextResponse.json(
         { 
           success: false, 
-          error: 'Missing required parameters: hash, publicKey, signedMessage, and shareAddresses array are required' 
+          error: 'Missing required parameters: hash, publicKey, signedMessage, and revokeAddresses array are required' 
         },
         { status: 400 }
       ));
     }
     
-    console.log('🔗 API Route: Sharing file:', hash);
+    console.log('🚫 API Route: Revoking access for file:', hash);
     console.log('👤 API Route: Owner:', publicKey);
-    console.log('🔄 API Route: Sharing with:', shareAddresses);
+    console.log('🔄 API Route: Revoking access from:', revokeAddresses);
     
     // Set up request with timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
     
     try {
-      // Forward the share request to our Lighthouse service
-      console.log('⏩ Forwarding share request to Lighthouse service', { 
-        url: `${LIGHTHOUSE_SERVICE_URL}/share/${hash}`,
-        payload: { publicKey, signedMessage, shareAddresses }
-      });
-      
-      const response = await fetch(`${LIGHTHOUSE_SERVICE_URL}/share/${hash}`, {
+      // Forward the revoke request to our Lighthouse service
+      const response = await fetch(`${LIGHTHOUSE_SERVICE_URL}/revoke/${hash}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey, signedMessage, shareAddresses }),
+        body: JSON.stringify({ publicKey, signedMessage, revokeAddresses }),
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        console.error('❌ API Route: Share request failed:', response.status, response.statusText);
+        console.error('❌ API Route: Revoke request failed:', response.status, response.statusText);
         
         // Try to get error details
         let errorText = '';
@@ -78,17 +73,17 @@ export async function POST(request: NextRequest) {
       }
       
       const data = await response.json();
-      console.log('✅ API Route: File shared successfully:', data);
+      console.log('✅ API Route: Access revoked successfully:', data);
       
       return addCorsHeaders(NextResponse.json(data));
       
     } catch (fetchError) {
       clearTimeout(timeoutId);
-      console.error('❌ API Route: Error sharing file:', fetchError);
+      console.error('❌ API Route: Error revoking access:', fetchError);
       
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         return addCorsHeaders(NextResponse.json(
-          { success: false, error: 'Share request timed out' },
+          { success: false, error: 'Revoke request timed out' },
           { status: 504 }
         ));
       }
@@ -100,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
     
   } catch (error) {
-    console.error('❌ API Route: Share file error:', error);
+    console.error('❌ API Route: Revoke access error:', error);
     
     return addCorsHeaders(NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Unknown error' },

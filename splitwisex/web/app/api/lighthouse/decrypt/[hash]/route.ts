@@ -1,52 +1,51 @@
-/**
- * API route to decrypt a file from Lighthouse
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 
 const LIGHTHOUSE_SERVICE_URL = process.env.LIGHTHOUSE_SERVICE_URL || 'http://localhost:3002';
 
-// Add CORS headers to responses
-function addCorsHeaders(response: NextResponse) {
-  response.headers.set('Access-Control-Allow-Origin', '*');
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  return response;
+// Helper function to add CORS headers
+function addCorsHeaders(res: NextResponse) {
+  res.headers.set('Access-Control-Allow-Origin', '*');
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Content-Type-Detected');
+  return res;
 }
 
-// Handle CORS preflight
+// Handle OPTIONS requests for CORS preflight
 export async function OPTIONS() {
-  return addCorsHeaders(NextResponse.json({}, { status: 200 }));
+  const response = NextResponse.json({}, { status: 200 });
+  return addCorsHeaders(response);
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { hash: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { hash: string } }) {
+  const hash = params.hash; // Correctly access hash from params
+
   try {
-    const { hash } = params;
-    
-    if (!hash) {
+    const requestData = await request.json();
+    const { publicKey, signedMessage, mimeType, debug } = requestData;
+
+    if (!hash || !publicKey || !signedMessage) {
       return addCorsHeaders(NextResponse.json(
-        { success: false, error: 'File hash is required' },
+        { success: false, error: 'Missing required parameters: hash, publicKey, and signedMessage' },
         { status: 400 }
       ));
     }
-    
-    // Parse request body
-    const body = await request.json();
-    const { publicKey, signedMessage, mimeType } = body;
-    
-    if (!publicKey || !signedMessage) {
-      return addCorsHeaders(NextResponse.json(
-        { success: false, error: 'Public key and signed message are required' },
-        { status: 400 }
-      ));
-    }
-    
+
     console.log('🔓 API Route: Decrypting file:', hash, 'for user:', publicKey);
+    console.log('  - Public Key:', publicKey.slice(0, 10) + '...');
+    console.log('  - Has Signed Message:', !!signedMessage);
+    console.log('  - Client MimeType Hint:', mimeType);
     
-    // Try our local service first (most reliable method)
+    if (debug) {
+      console.log('  - Debug Info:', JSON.stringify(debug, null, 2));
+    }
+
+    let decryptedBlob: Blob | null = null;
+    let detectedContentType: string = mimeType || 'application/octet-stream';
+    let decryptionSource: string = 'unknown';
+    let localServiceError: string | undefined;
+    let directApiError: string | undefined;
+
+    // --- Attempt 1: Try local Lighthouse service first ---
     try {
       console.log('🔄 API Route: Trying local service for decryption');
       
@@ -57,7 +56,7 @@ export async function POST(
       const response = await fetch(`${LIGHTHOUSE_SERVICE_URL}/decrypt/${hash}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey, signedMessage, mimeType }),
+        body: JSON.stringify({ publicKey, signedMessage, mimeType, debug }),
         signal: controller.signal
       });
       
@@ -111,6 +110,8 @@ export async function POST(
       // If local service fails, try direct Lighthouse API
       try {
         console.log('🔑 API Route: Using direct Lighthouse API for decryption');
+        console.log('🔑 API Route: Debug - publicKey:', publicKey);
+        console.log('🔑 API Route: Debug - hash:', hash);
         
         // Make a direct call to the Lighthouse decryption API
         const decryptionUrl = `https://decrypt-api.lighthouse.storage/api/decrypt`;
@@ -143,28 +144,40 @@ export async function POST(
           // Add CORS headers
           return addCorsHeaders(decryptedResponse);
         } else {
-          throw new Error(`Lighthouse API decryption failed with status ${decryptionResponse.status}`);
+          // Try to get error details
+          let errorText = '';
+          try {
+            const errorData = await decryptionResponse.json();
+            errorText = JSON.stringify(errorData);
+          } catch (e) {
+            errorText = `Status: ${decryptionResponse.status}`;
+          }
+          
+          throw new Error(`Lighthouse API decryption failed: ${errorText}`);
         }
       } catch (directApiError) {
         console.error('❌ API Route: Direct Lighthouse API error:', directApiError);
         
-        const localServiceErrorMessage = localServiceError instanceof Error 
-          ? localServiceError.message 
-          : 'Unknown local service error';
-          
-        const directApiErrorMessage = directApiError instanceof Error 
-          ? directApiError.message 
-          : 'Unknown direct API error';
-          
-        throw new Error(`All decryption methods failed: ${localServiceErrorMessage}, ${directApiErrorMessage}`);
+        // If both methods fail, return error
+        return addCorsHeaders(NextResponse.json(
+          { 
+            success: false, 
+            error: `Decryption failed. Local service error: ${localServiceError}. Direct API error: ${directApiError}`,
+            debug: {
+              publicKey,
+              hash,
+              timestamp: new Date().toISOString()
+            }
+          },
+          { status: 403 } // Forbidden if decryption fails
+        ));
       }
     }
-    
-  } catch (error) {
-    console.error('❌ API Route: Decryption error:', error);
-    
+
+  } catch (error: any) {
+    console.error('❌ API Route: Decryption proxy error:', error);
     return addCorsHeaders(NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { success: false, error: error.message || 'Unknown decryption proxy error' },
       { status: 500 }
     ));
   }

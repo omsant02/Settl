@@ -1,79 +1,56 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
-import { FileUploader } from "react-drag-drop-files";
+import { FileUploader } from 'react-drag-drop-files';
+import Link from 'next/link';
+
+const fileTypes = ["JPG", "PNG", "GIF", "JPEG", "PDF", "MP4", "MP3", "ZIP", "WEBP"];
 
 export default function UploadLighthouseEncrypted() {
   const [file, setFile] = useState<File | null>(null);
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [uploadResult, setUploadResult] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadedFileHash, setUploadedFileHash] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
-  
-  // Fetch API key on component mount
-  useEffect(() => {
-    async function fetchApiKey() {
-      try {
-        const response = await fetch('/api/lighthouse/get-api-key');
-        const data = await response.json();
-        if (data.success) {
-          setApiKey(data.apiKey);
-          console.log('✅ API key retrieved successfully');
-        } else {
-          console.error('❌ Failed to retrieve API key:', data.error);
-        }
-      } catch (error) {
-        console.error('❌ Error fetching API key:', error);
-      }
-    }
-    
-    fetchApiKey();
-  }, []);
-  
-  const handleFileChange = (file: File | File[]) => {
-    // Ensure we're handling a single file
-    const singleFile = Array.isArray(file) ? file[0] : file;
-    setFile(singleFile);
-    setUploadResult(null);
+
+  const handleFileChange = (fileOrFiles: File | File[]) => {
+    // Handle single file or first file from array
+    const selectedFile = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
+    setFile(selectedFile);
     setUploadError(null);
+    setUploadSuccess(false);
+    setUploadedFileHash(null);
+    setUploadedFileName(null);
+    setUploadProgress(0);
   };
-  
-  const handleEncryptedUpload = async () => {
-    if (!file || !isConnected || !address) {
-      setUploadError('Please connect your wallet and select a file first');
+
+  const handleServerSideEncryption = async () => {
+    if (!file) {
+      setUploadError('Please select a file first');
       return;
     }
-    
+
+    if (!isConnected || !address) {
+      setUploadError('Please connect your wallet to encrypt files');
+      return;
+    }
+
     setIsUploading(true);
     setUploadError(null);
-    
+    setUploadSuccess(false);
+    setUploadedFileHash(null);
+    setUploadedFileName(null);
+    setUploadProgress(0);
+
     try {
-      console.log('🔐 Starting encrypted upload...', {
-        fileName: file.name,
-        fileSize: file.size,
-        isConnected,
-        address
-      });
-      
-      await handleServerSideEncryption();
-    } catch (error) {
-      console.error('❌ Upload failed:', error);
-      setUploadError(`Upload failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-  
-  const handleServerSideEncryption = async () => {
-    if (!file || !apiKey || !address) return;
-    
-    console.log('🖥️ Using server-side encryption via backend');
-    
-    try {
+      console.log('🔐 Starting server-side encryption for:', file.name);
+
       // Step 1: Get authentication message
       console.log('📋 Getting auth message for encryption...');
       const authMessageResponse = await fetch('/api/lighthouse/auth-message', {
@@ -81,37 +58,45 @@ export default function UploadLighthouseEncrypted() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicKey: address })
       });
-      
+
+      if (!authMessageResponse.ok) {
+        throw new Error(`Auth message request failed with status ${authMessageResponse.status}`);
+      }
+
       const authMessageData = await authMessageResponse.json();
-      console.log('📝 Auth message to sign for encryption:', authMessageData.message);
+      if (!authMessageData.success && !authMessageData.message) {
+        throw new Error(authMessageData.error || 'Failed to get auth message');
+      }
       
+      const messageToSign = authMessageData.message || 
+                           (authMessageData.data && authMessageData.data.message) || 
+                           'Failed to get auth message';
+                           
+      console.log('📝 Auth message to sign for encryption:', messageToSign);
+
       // Step 2: Sign the message with user's wallet
-      const signedMessage = await signMessageAsync({ 
-        message: authMessageData.message 
+      const signedMessage = await signMessageAsync({
+        message: messageToSign
       });
       console.log('✅ Encryption message signed successfully');
-      console.log('🔑 Signed message:', signedMessage);
+
+      // Step 3: Upload file with encryption
+      console.log('📤 Uploading file to server for encryption...');
       
-      // Step 3: Prepare form data for upload
+      // Create form data for file upload
       const formData = new FormData();
       formData.append('file', file);
       formData.append('publicKey', address);
       formData.append('signedMessage', signedMessage);
-      // IMPORTANT: Explicitly set encrypted flag to true
       formData.append('encrypted', 'true');
       formData.append('encryptionType', 'standard');
       
-      console.log('👤 Public key (address):', address);
-      console.log('📦 FormData prepared with encryption parameters (explicitly set encrypted=true)');
-      
-      // Step 4: Upload with encryption via our backend
-      console.log('📤 Sending request to /api/lighthouse/upload...');
-      
-      // Add timeout protection
+      // Set up request with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (2 minutes)
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
       
       try {
+        // Use our API proxy to upload to the Lighthouse service
         const uploadResponse = await fetch('/api/lighthouse/upload', {
           method: 'POST',
           body: formData,
@@ -121,74 +106,87 @@ export default function UploadLighthouseEncrypted() {
         clearTimeout(timeoutId);
         
         if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text();
-          throw new Error(`Server responded with ${uploadResponse.status}: ${errorText}`);
-        }
-        
-        const uploadData = await uploadResponse.json();
-        console.log('✅ Upload response:', uploadData);
-        
-        // Verify if the upload was actually encrypted
-        const isEncrypted = uploadData.encrypted === true || 
-                           (typeof uploadData.data === 'object' && uploadData.data.encrypted === true);
-        
-        if (uploadData.success) {
-          setUploadResult({
-            success: true,
-            fileName: file.name,
-            fileSize: (file.size / (1024 * 1024)).toFixed(2),
-            hash: uploadData.hash || uploadData.cid || 
-                 (uploadData.data && (uploadData.data.Hash || uploadData.data.hash || uploadData.data.cid)),
-            isEncrypted: isEncrypted
-          });
-          
-          if (!isEncrypted) {
-            console.warn('⚠️ Warning: File was uploaded but may not be encrypted despite request');
+          let errorMessage = 'Upload failed';
+          try {
+            const errorData = await uploadResponse.json();
+            errorMessage = errorData.error || `Upload failed with status ${uploadResponse.status}`;
+          } catch (e) {
+            errorMessage = `Upload failed with status ${uploadResponse.status}`;
           }
-        } else {
-          throw new Error(uploadData.error || 'Upload failed');
+          throw new Error(errorMessage);
         }
-      } catch (error: any) {
-        if (error.name === 'AbortError') {
+        
+        const responseData = await uploadResponse.json();
+        console.log('✅ Server-side encryption response:', responseData);
+        
+        if (!responseData.success) {
+          throw new Error(responseData.error || 'Upload failed on the server');
+        }
+        
+        // Check if the file was actually encrypted
+        if (!responseData.encrypted) {
+          console.warn('⚠️ File was uploaded but not encrypted');
+        }
+        
+        setUploadSuccess(true);
+        setUploadedFileHash(responseData.hash);
+        setUploadedFileName(file.name);
+        
+      } catch (fetchError) {
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
           throw new Error('Upload request timed out. Server may be overloaded or unresponsive.');
         }
-        throw error;
+        throw fetchError;
       }
+      
     } catch (error) {
       console.error('❌ Server-side encryption failed:', error);
-      throw error;
+      setUploadError(`Encryption failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsUploading(false);
     }
   };
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Upload files with end-to-end encryption to Filecoin via Lighthouse</h1>
+      <h1 className="text-3xl font-bold mb-6">🔐 Upload Encrypted File</h1>
       
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-2">Encryption Always Enabled</h2>
-          <p className="text-gray-600">
-            All files uploaded through this route are automatically encrypted. 
-            Only you can decrypt them with your wallet.
-          </p>
-        </div>
+        <h2 className="text-xl font-semibold mb-4">Select File to Encrypt</h2>
         
         <div className="mb-6">
           <FileUploader
             handleChange={handleFileChange}
             name="file"
-            label="Choose File to Encrypt"
-            hoverTitle="Drop file here"
-          />
-          {file && (
-            <p className="mt-2 text-sm text-gray-600">
-              {file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)
-            </p>
-          )}
+            types={fileTypes}
+            classes="w-full"
+          >
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 cursor-pointer">
+              <p className="text-lg mb-2">Drag & Drop or Click to Browse</p>
+              <p className="text-sm text-gray-500">
+                Supported formats: {fileTypes.join(', ')}
+              </p>
+              {file && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                  <p className="font-medium">{file.name}</p>
+                  <p className="text-sm text-gray-600">
+                    {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  </p>
+                </div>
+              )}
+            </div>
+          </FileUploader>
         </div>
         
+        {!isConnected && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
+            <p className="font-semibold">Connect your wallet</p>
+            <p className="text-sm">You need to connect your wallet to encrypt files.</p>
+          </div>
+        )}
+        
         <button
-          onClick={handleEncryptedUpload}
+          onClick={handleServerSideEncryption}
           disabled={!file || isUploading || !isConnected}
           className={`w-full py-2 px-4 rounded-md font-medium ${
             !file || isUploading || !isConnected
@@ -196,7 +194,7 @@ export default function UploadLighthouseEncrypted() {
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
-          {isUploading ? '🔐 Encrypting & Uploading...' : '🔐 Encrypt & Upload to Filecoin'}
+          {isUploading ? 'Encrypting...' : '1. Encrypt & Upload File'}
         </button>
         
         {uploadError && (
@@ -204,46 +202,56 @@ export default function UploadLighthouseEncrypted() {
             {uploadError}
           </div>
         )}
-      </div>
-      
-      {uploadResult && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4">🔐 Encrypted Upload Result:</h2>
-          <div className="space-y-2">
-            <p><strong>File:</strong> {uploadResult.fileName}</p>
-            <p><strong>Size:</strong> {uploadResult.fileSize} MB</p>
-            <p><strong>Status:</strong> {uploadResult.isEncrypted 
-              ? '🔐 Encrypted' 
-              : '⚠️ Note: File uploaded successfully, but encryption failed'}</p>
-            {uploadResult.hash && (
-              <>
-                <p className="break-all"><strong>CID:</strong> {uploadResult.hash}</p>
-                <div className="mt-4">
-                  <h3 className="font-semibold mb-2">
-                    {uploadResult.isEncrypted 
-                      ? '✅ Successfully Encrypted: Your file is now securely stored on Filecoin. Only you can decrypt it with your connected wallet.'
-                      : '⚠️ Warning: Your file was uploaded but NOT encrypted. Anyone can access it.'}
-                  </h3>
-                  <div className="flex space-x-4 mt-4">
-                    <a
-                      href={`/decrypt-file/${uploadResult.hash}`}
-                      className="inline-block bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                    >
-                      🔓 Decrypt & View File
-                    </a>
-                    <a
-                      href={`/view-file/${uploadResult.hash}`}
-                      className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                      View in App
-                    </a>
-                  </div>
-                </div>
-              </>
-            )}
+        
+        {uploadSuccess && uploadedFileHash && (
+          <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-md">
+            <p className="font-semibold text-green-800 mb-2">
+              ✅ File encrypted and uploaded successfully!
+            </p>
+            <p className="mb-2">
+              <span className="font-medium">File:</span> {uploadedFileName}
+            </p>
+            <p className="mb-4">
+              <span className="font-medium">CID:</span> {uploadedFileHash}
+            </p>
+            
+            <div className="flex flex-col space-y-3">
+              <Link 
+                href={`/view-file/${uploadedFileHash}`}
+                className="inline-block bg-blue-600 text-white text-center py-2 px-4 rounded hover:bg-blue-700"
+              >
+                2. Manage Access (Share & Revoke)
+              </Link>
+              
+              <Link 
+                href={`/decrypt-file/${uploadedFileHash}`}
+                className="inline-block bg-green-600 text-white text-center py-2 px-4 rounded hover:bg-green-700"
+              >
+                3. Decrypt & View File
+              </Link>
+              
+              <a 
+                href={`https://gateway.lighthouse.storage/ipfs/${uploadedFileHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block bg-purple-600 text-white text-center py-2 px-4 rounded hover:bg-purple-700"
+              >
+                4. View on IPFS Gateway
+              </a>
+            </div>
           </div>
+        )}
+        
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+          <h3 className="font-semibold mb-2">About Encrypted File Storage</h3>
+          <ul className="list-disc list-inside space-y-1 text-sm">
+            <li>Files are encrypted using BLS encryption</li>
+            <li>Only you and wallets you share with can decrypt the file</li>
+            <li>Files are stored on IPFS and Filecoin</li>
+            <li>You can revoke access at any time</li>
+          </ul>
         </div>
-      )}
+      </div>
     </div>
   );
 }

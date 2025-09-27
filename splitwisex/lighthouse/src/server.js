@@ -130,6 +130,36 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         );
 
         console.log('✅ Encrypted upload response:', JSON.stringify(response));
+        
+        // Record ownership in file metadata
+        try {
+          // Store the owner information - this will help with ownership verification later
+          console.log('📝 Recording file ownership for:', publicKey);
+          
+          const fileHash = response?.data?.[0]?.Hash || response?.data?.[0]?.hash;
+          if (fileHash) {
+            const ownershipData = {
+              fileHash: fileHash,
+              owner: publicKey.toLowerCase(),
+              timestamp: new Date().toISOString()
+            };
+            
+            // Create ownership records directory if it doesn't exist
+            const ownershipDir = path.join(__dirname, 'ownership');
+            if (!fs.existsSync(ownershipDir)) {
+              fs.mkdirSync(ownershipDir, { recursive: true });
+              console.log('📁 Created ownership records directory');
+            }
+            
+            // Save ownership record to a JSON file
+            const ownershipPath = path.join(ownershipDir, `${fileHash}.json`);
+            fs.writeFileSync(ownershipPath, JSON.stringify(ownershipData, null, 2));
+            console.log('✅ Ownership record saved for file:', fileHash);
+          }
+        } catch (ownershipError) {
+          console.error('⚠️ Failed to record ownership:', ownershipError);
+          // Non-fatal error, continue with the upload process
+        }
 
         // Parse response and return result
         if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
@@ -325,6 +355,318 @@ app.get('/download/:hash', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Share encrypted file with another wallet
+app.post('/share/:hash', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const { publicKey, signedMessage, shareAddresses } = req.body;
+
+    if (!hash || !publicKey || !signedMessage || !shareAddresses || !Array.isArray(shareAddresses)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Hash, publicKey, signedMessage, and shareAddresses array are required'
+      });
+    }
+
+    console.log('🔗 Sharing file:', hash);
+    console.log('👤 Owner:', publicKey);
+    console.log('🔄 Sharing with:', shareAddresses);
+    console.log('📝 SignedMessage length:', signedMessage?.length);
+    
+    try {
+      // Use the Lighthouse SDK to share the file
+      console.log('📤 Calling Lighthouse SDK shareFile with:');
+      console.log('  - publicKey:', publicKey);
+      console.log('  - shareAddresses:', shareAddresses);
+      console.log('  - hash:', hash);
+      console.log('  - signedMessage length:', signedMessage?.length);
+      
+      const shareResponse = await lighthouse.shareFile(
+        publicKey,
+        shareAddresses,
+        hash,
+        signedMessage
+      );
+
+      console.log('✅ Share response:', JSON.stringify(shareResponse));
+
+      if (!shareResponse) {
+        throw new Error('No response from shareFile SDK call');
+      }
+      
+      if (shareResponse.data && shareResponse.data.status === 'failed') {
+        console.error('❌ Share failed with status "failed":', shareResponse.data);
+        return res.status(400).json({
+          success: false,
+          error: shareResponse.data.message || 'Share operation failed',
+          details: shareResponse.data,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      if (!shareResponse.data) {
+        throw new Error('Invalid share response: missing data property');
+      }
+
+      res.json({
+        success: true,
+        data: shareResponse.data,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      console.error('Share file error:', error);
+      
+      // Check for specific error types from the Lighthouse SDK
+      const errorMessage = error.message || 'Unknown error';
+      let statusCode = 500;
+      
+      if (errorMessage.includes('401') || errorMessage.includes('unauthorized') || errorMessage.includes('Unauthorized')) {
+        statusCode = 401;
+        console.error('❌ Authentication error when sharing file - invalid signature');
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Share file outer error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Check if wallet address is the owner of a file
+app.post('/check-owner/:hash', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const { publicKey } = req.body;
+
+    if (!hash || !publicKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Hash and publicKey are required'
+      });
+    }
+
+    console.log('🔍 Checking if wallet is file owner:', hash);
+    console.log('👤 Wallet address:', publicKey);
+
+    try {
+      // Step 0: Check our local ownership records first (most reliable method)
+      try {
+        const ownershipDir = path.join(__dirname, 'ownership');
+        const ownershipPath = path.join(ownershipDir, `${hash}.json`);
+        
+        if (fs.existsSync(ownershipPath)) {
+          console.log('✅ Found local ownership record for file');
+          const ownershipData = JSON.parse(fs.readFileSync(ownershipPath, 'utf8'));
+          
+          // Compare owner address (case-insensitive)
+          if (ownershipData.owner && ownershipData.owner.toLowerCase() === publicKey.toLowerCase()) {
+            console.log('✅ Local ownership record confirms wallet is owner');
+            return res.json({
+              success: true,
+              isOwner: true,
+              data: { ownershipRecord: true },
+              message: 'Wallet is the file owner (from local ownership records)',
+              timestamp: new Date().toISOString()
+            });
+          } else {
+            console.log('❌ Local ownership record shows different owner');
+            console.log(`   Record shows: ${ownershipData.owner}`);
+            console.log(`   Current wallet: ${publicKey}`);
+            return res.json({
+              success: true,
+              isOwner: false,
+              message: 'Wallet is not the file owner (confirmed by ownership records)',
+              timestamp: new Date().toISOString()
+            });
+          }
+        } else {
+          console.log('⚠️ No local ownership record found for file, trying alternative methods');
+        }
+      } catch (ownershipError) {
+        console.log('⚠️ Error checking local ownership records:', ownershipError.message);
+        // Continue to next methods if local records check fails
+      }
+      
+      // Step 1: Try to check file access control conditions from Lighthouse
+      try {
+        const accessControlConditions = await lighthouse.getAccessConditions(hash);
+        console.log('✅ Access control conditions retrieved');
+        
+        if (accessControlConditions && accessControlConditions.data) {
+          // Look for the wallet in the access control data
+          // The uploader/owner is typically indicated in the access control data
+          const ownerData = accessControlConditions.data.find(item => 
+            item.id && item.id.toLowerCase() === publicKey.toLowerCase()
+          );
+          
+          if (ownerData) {
+            console.log('✅ Wallet found in access control data - is owner');
+            return res.json({
+              success: true,
+              isOwner: true,
+              data: accessControlConditions.data,
+              message: 'Wallet is the file owner (from access control data)',
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+      } catch (accessError) {
+        console.log('⚠️ Could not get access conditions:', accessError.message);
+        // Continue to step 2, this is just the first attempt
+      }
+      
+      // Step 2: Try to check if the wallet can encrypt/decrypt the file
+      try {
+        // Generate a random message to sign
+        const authMessage = await lighthouse.getAuthMessage(publicKey);
+        if (!authMessage || !authMessage.data || !authMessage.data.message) {
+          throw new Error('Failed to get auth message');
+        }
+        
+        console.log('✅ Auth message retrieved, attempting ownership check');
+        
+        // Alternative check: Try to get file information as this user
+        const fileInfo = await lighthouse.getUploads(publicKey, 1);
+        console.log('📊 User uploads:', JSON.stringify(fileInfo));
+        
+        // Check if this file is in the user's uploads
+        if (fileInfo && fileInfo.data && Array.isArray(fileInfo.data.fileList)) {
+          const isFileInUploads = fileInfo.data.fileList.some(file => 
+            file.cid === hash
+          );
+          
+          if (isFileInUploads) {
+            console.log('✅ File found in user uploads - is owner');
+            return res.json({
+              success: true,
+              isOwner: true,
+              message: 'Wallet is the file owner (found in user uploads)',
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+        
+        // Step 3: Don't assume ownership, we need explicit verification
+        try {
+          // This is a basic check to see if the user has access rights
+          // It doesn't confirm ownership but helps verify access
+          console.log('🔑 Checking if user can access the file');
+          
+          // No longer assume ownership without explicit verification
+          console.log('⚠️ Cannot verify file ownership');
+          
+          // We'll be more conservative and default to not owner when ownership can't be verified
+          return res.json({
+            success: true,
+            isOwner: false, // Default to not owner when we can't verify
+            message: 'Cannot verify ownership, defaulting to not owner',
+            timestamp: new Date().toISOString()
+          });
+          
+        } catch (decryptError) {
+          console.log('⚠️ User cannot decrypt file:', decryptError.message);
+        }
+      } catch (error) {
+        console.error('❌ Error during ownership check:', error);
+      }
+      
+      // If we've exhausted all checks and can't confirm ownership, default to not owner
+      console.log('❓ Unable to determine ownership status, defaulting to not owner');
+      return res.json({
+        success: true,
+        isOwner: false,
+        message: 'Could not verify ownership, assuming not owner',
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error checking ownership:', error);
+      
+      // If the error is related to the file not being encrypted, we can infer it's not owner-controlled
+      if (error.message && error.message.includes('not encrypted')) {
+        return res.json({
+          success: true,
+          isOwner: false,
+          message: 'File is not encrypted, no ownership to check',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // For other errors, return false for ownership check
+      return res.status(400).json({
+        success: false,
+        isOwner: false,
+        error: error.message || 'Failed to check ownership',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Check owner error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Revoke access to shared file
+app.post('/revoke/:hash', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const { publicKey, signedMessage, revokeAddresses } = req.body;
+
+    if (!hash || !publicKey || !signedMessage || !revokeAddresses || !Array.isArray(revokeAddresses)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Hash, publicKey, signedMessage, and revokeAddresses array are required'
+      });
+    }
+
+    console.log('🚫 Revoking access for file:', hash);
+    console.log('👤 Owner:', publicKey);
+    console.log('🔄 Revoking access from:', revokeAddresses);
+
+    // Use the Lighthouse SDK to revoke access
+    const revokeResponse = await lighthouse.revokeFileAccess(
+      publicKey,
+      revokeAddresses,
+      hash,
+      signedMessage
+    );
+
+    console.log('✅ Revoke response:', revokeResponse);
+
+    if (!revokeResponse || !revokeResponse.data) {
+      throw new Error('Invalid revoke response');
+    }
+
+    res.json({
+      success: true,
+      data: revokeResponse.data,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Revoke access error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -579,6 +921,9 @@ app.listen(port, () => {
   console.log(`- Upload: POST http://localhost:${port}/upload`);
   console.log(`- Download: GET http://localhost:${port}/download/:hash`);
   console.log(`- Decrypt: POST http://localhost:${port}/decrypt/:hash`);
+  console.log(`- Share File: POST http://localhost:${port}/share/:hash`);
+  console.log(`- Revoke Access: POST http://localhost:${port}/revoke/:hash`);
+  console.log(`- Check Owner: POST http://localhost:${port}/check-owner/:hash`);
   console.log(`- View Image: POST http://localhost:${port}/view-image/:hash`);
   console.log(`- Auth Message: GET http://localhost:${port}/auth-message/:address`);
 });
