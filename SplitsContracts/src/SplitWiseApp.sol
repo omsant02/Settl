@@ -3,13 +3,24 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
 // ENS Interfaces for Sepolia
 interface ENS {
-    function setSubnodeOwner(bytes32 node, bytes32 label, address owner) external returns (bytes32);
-    function setResolver(bytes32 node, address resolver) external;
     function owner(bytes32 node) external view returns (address);
     function resolver(bytes32 node) external view returns (address);
+}
+
+interface INameWrapper {
+    function setSubnodeOwner(
+        bytes32 parentNode,
+        string memory label, 
+        address owner,
+        uint32 fuses,
+        uint64 expiry
+    ) external returns (bytes32);
+    
+    function setResolver(bytes32 node, address resolver) external;
 }
 
 interface IAddrResolver {
@@ -27,12 +38,13 @@ interface IReverseRegistrar {
  * @dev A Web3 expense splitting app with ENS subdomain integration
  * @notice Users get alice.settl.eth subdomains and can split expenses by ENS names
  */
-contract SplitWiseApp is Ownable, ReentrancyGuard {
+contract SplitWiseApp is Ownable, ReentrancyGuard, ERC1155Holder {
     
     // Sepolia ENS Contract Addresses
     ENS public constant ensRegistry = ENS(0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e);
+    INameWrapper public constant nameWrapper = INameWrapper(0x0635513f179D50A207757E05759CbD106d7dFcE8);
     IAddrResolver public constant publicResolver = IAddrResolver(0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5);
-    IReverseRegistrar public constant reverseRegistrar = IReverseRegistrar(0xA0a1AbcDAe1a2a4A2EF8e9113Ff0e02DD81DC0C6);
+    IReverseRegistrar public constant reverseRegistrar = IReverseRegistrar(0x4F382928805ba0e23B30cFB75fC9E848e82DFD47);
     
     bytes32 public rootNode; // namehash for settl.eth
     
@@ -133,15 +145,26 @@ contract SplitWiseApp is Ownable, ReentrancyGuard {
         require(!users[msg.sender].registered, "User already registered");
         require(_isValidSubdomainFormat(subdomain), "Invalid subdomain format");
         
-        bytes32 labelHash = keccak256(bytes(subdomain));
-        bytes32 createdSubnode = ensRegistry.setSubnodeOwner(rootNode, labelHash, msg.sender);
+        // Create subdomain using NameWrapper (for wrapped domains)
+        bytes32 createdSubnode = nameWrapper.setSubnodeOwner(
+            rootNode,
+            subdomain,
+            msg.sender,
+            0,  // No fuses burned
+            0   // Use parent's expiry
+        );
         
-        ensRegistry.setResolver(createdSubnode, address(publicResolver));
+        // Set resolver for the subdomain
+        nameWrapper.setResolver(createdSubnode, address(publicResolver));
+        
+        // Set address record in resolver (forward resolution)
         publicResolver.setAddr(createdSubnode, msg.sender);
         
+        // Set reverse resolution (address -> name)
         string memory fullName = string(abi.encodePacked(subdomain, ".settl.eth"));
         reverseRegistrar.setName(fullName);
         
+        // Update our mappings
         users[msg.sender] = User({
             subdomain: subdomain,
             registered: true,
