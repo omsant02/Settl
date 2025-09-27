@@ -3,13 +3,11 @@ import multer from 'multer';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import lighthouse from '@lighthouse-web3/sdk';
 import * as lighthouseJS from './lighthouse-js-sdk.js';
-import fetch from 'node-fetch';
-import { Wallet } from 'ethers';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import crypto from 'crypto'; // Import crypto for file hashing
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -24,14 +22,9 @@ app.use(cors());
 // Parse JSON body for non-file requests
 app.use(express.json());
 
-// Configure multer for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage: storage,
-  limits: { 
-    fileSize: 50 * 1024 * 1024 // 50MB limit
-  }
-});
+// Configure Multer for file uploads
+const storage = multer.memoryStorage(); // Store file in memory as a Buffer
+const upload = multer({ storage: storage });
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -42,7 +35,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Upload file endpoint
+// Upload endpoint
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -52,14 +45,13 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       });
     }
 
-    const { publicKey, signedMessage, encrypted, encryptionType } = req.body;
+    const { publicKey, signedMessage, encrypted } = req.body;
 
     console.log('📤 Uploading file:', {
       filename: req.file.originalname,
       size: req.file.size,
       mimetype: req.file.mimetype,
       encrypted: encrypted === 'true',
-      encryptionType: encryptionType || 'standard',
       hasPublicKey: !!publicKey,
       publicKeyLength: publicKey?.length,
       hasSignedMessage: !!signedMessage,
@@ -75,176 +67,136 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     let result;
 
-    if (encrypted === 'true') {
-      // Create a local file in the project directory instead of using system temp
-      const fileHash = crypto.createHash('md5').update(req.file.buffer).digest('hex');
-      
-      // Create uploads directory if it doesn't exist
-      const uploadsDir = path.join(process.cwd(), 'uploads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-        console.log('📁 Created uploads directory:', uploadsDir);
-      }
-      
-      // Use a fixed location in project directory
-      const tempFilePath = path.join(uploadsDir, `${fileHash}-${req.file.originalname}`);
-      console.log('📁 Using local file path instead of system temp:', tempFilePath);
-      
-      // Write to the file directly with writeFileSync
-      try {
-        // Write buffer directly to file
-        fs.writeFileSync(tempFilePath, req.file.buffer);
-        console.log('✅ Successfully wrote data to file');
-        
-        // Double-check file size after writing
-        const statsAfterWrite = fs.statSync(tempFilePath);
-        if (statsAfterWrite.size !== req.file.buffer.length) {
-          console.warn('⚠️ Warning: File size mismatch after write');
-          console.warn(`   Expected: ${req.file.buffer.length} bytes, Actual: ${statsAfterWrite.size} bytes`);
-        } else {
-          console.log('✓ File size verified after write:', statsAfterWrite.size, 'bytes');
-        }
-      } catch (writeErr) {
-        console.error('❌ Failed to write temporary file:', writeErr.message);
-        // Try to clean up
-        try {
-          fs.unlinkSync(tempFilePath);
-        } catch (e) { /* ignore cleanup errors */ }
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to create temporary file: ' + writeErr.message
-        });
-      }
-      
-      // Additional logging for temporary file
-      console.log('📊 Temp file details:');
-      console.log('  - File exists:', fs.existsSync(tempFilePath));
-      console.log('  - File size:', fs.statSync(tempFilePath).size, 'bytes');
-      console.log('  - Original filename:', req.file.originalname);
-      console.log('  - Temp filepath:', tempFilePath);
-      console.log('  - Temp directory:', path.dirname(tempFilePath));
+    // Create a local file in the project directory instead of using system temp
+    const fileHash = crypto.createHash('md5').update(req.file.buffer).digest('hex');
 
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+      console.log('📁 Created uploads directory:', uploadsDir);
+    }
+
+    // Use a fixed location in project directory
+    const tempFilePath = path.join(uploadsDir, `${fileHash}-${req.file.originalname}`);
+    console.log('📁 Using local file path instead of system temp:', tempFilePath);
+
+    // Write to the file directly with writeFileSync
+    try {
+      // Write buffer directly to file
+      fs.writeFileSync(tempFilePath, req.file.buffer);
+      console.log('✅ Successfully wrote data to file');
+
+      // Double-check file size after writing
+      const statsAfterWrite = fs.statSync(tempFilePath);
+      if (statsAfterWrite.size !== req.file.buffer.length) {
+        console.warn('⚠️ Warning: File size mismatch after write');
+        console.warn(`   Expected: ${req.file.buffer.length} bytes, Actual: ${statsAfterWrite.size} bytes`);
+      } else {
+        console.log('✓ File size verified after write:', statsAfterWrite.size, 'bytes');
+      }
+    } catch (writeErr) {
+      console.error('❌ Failed to write temporary file:', writeErr.message);
+      // Try to clean up
       try {
-        // DIRECT APPROACH: Use uploadEncrypted directly
+        fs.unlinkSync(tempFilePath);
+      } catch (e) { /* ignore cleanup errors */ }
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create temporary file: ' + writeErr.message
+      });
+    }
+
+    // Additional logging for temporary file
+    console.log('📊 Temp file details:');
+    console.log('  - File exists:', fs.existsSync(tempFilePath));
+    console.log('  - File size:', fs.statSync(tempFilePath).size, 'bytes');
+    console.log('  - Original filename:', req.file.originalname);
+    console.log('  - Temp filepath:', tempFilePath);
+    console.log('  - Temp directory:', path.dirname(tempFilePath));
+
+    if (encrypted === 'true') {
+      try {
         console.log('🔐 Using direct encrypted upload method');
         console.log('👤 File owner will be:', publicKey);
-        
+        console.log('📤 Performing direct encrypted upload...');
+
+        // This is the most direct way to upload encrypted files
+        const response = await lighthouse.uploadEncrypted(
+          tempFilePath,
+          apiKey,
+          publicKey,
+          signedMessage
+        );
+
+        console.log('✅ Encrypted upload response:', JSON.stringify(response));
+
+        // Parse response and return result
+        if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
+          const fileData = response.data[0];
+          const hash = fileData.Hash || fileData.hash;
+
+          if (hash) {
+            result = {
+              success: true,
+              hash: hash,
+              name: req.file.originalname,
+              size: req.file.size,
+              mimetype: req.file.mimetype,
+              encrypted: true,
+              publicKey: publicKey,
+              note: 'Direct encrypted upload successful'
+            };
+
+            console.log('ℹ️ Keeping temporary file for successful upload');
+            return res.json(result);
+          }
+        }
+
+        throw new Error('No hash returned from upload - invalid response format');
+      } catch (directUploadError) {
+        console.error('❌ Direct encrypted upload failed:', directUploadError.message);
+
+        // Try fallback method - regular upload first
+        console.log('🔄 Trying fallback: regular upload first...');
+
         try {
-          // This is the most direct way to upload encrypted files
-          console.log('📤 Performing direct encrypted upload...');
-          
-          const response = await lighthouse.uploadEncrypted(
+          // First, do a regular non-encrypted upload
+          const uploadResponse = await lighthouse.upload(
             tempFilePath,
-            apiKey,
-            publicKey,
-            signedMessage
+            apiKey
           );
-          
-          console.log('✅ Encrypted upload response:', JSON.stringify(response));
-          
-          // Parse response and return result
-          if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
-            const fileData = response.data[0];
-            const hash = fileData.Hash || fileData.hash;
-            
-            if (hash) {
-              result = {
-                success: true,
-                hash: hash,
-                name: req.file.originalname,
-                size: req.file.size,
-                encrypted: true,
-                publicKey: publicKey,
-                note: 'Direct encrypted upload successful'
-              };
-              
-              return res.json(result);
-            }
+
+          console.log('✅ Regular upload successful:', JSON.stringify(uploadResponse));
+
+          if (uploadResponse && uploadResponse.data && uploadResponse.data.Hash) {
+            const cid = uploadResponse.data.Hash;
+            console.log('🔑 CID obtained from regular upload:', cid);
+
+            // Return success with the CID but mark as not encrypted
+            return res.json({
+              success: true,
+              hash: cid,
+              name: req.file.originalname,
+              size: req.file.size,
+              mimetype: req.file.mimetype,
+              encrypted: false,
+              publicKey: publicKey,
+              note: 'Upload successful but not encrypted'
+            });
           }
-          
-          throw new Error('No hash returned from upload - invalid response format');
-        } catch (directUploadError) {
-          console.error('❌ Direct encrypted upload failed:', directUploadError.message);
-          
-          // FALLBACK: Try regular upload
-          console.log('🔄 Trying fallback: regular upload...');
-          
+        } catch (fallbackError) {
+          console.error('❌ Fallback upload also failed:', fallbackError.message);
+          throw fallbackError;
+        } finally {
+          // Clean up temp file
           try {
-            const uploadResponse = await lighthouse.upload(
-              tempFilePath, 
-              apiKey
-            );
-            
-            console.log('✅ Regular upload successful:', JSON.stringify(uploadResponse));
-            
-            if (uploadResponse && uploadResponse.data && uploadResponse.data.Hash) {
-              const hash = uploadResponse.data.Hash;
-              
-              result = {
-                success: true,
-                hash: hash,
-                name: req.file.originalname,
-                size: req.file.size,
-                encrypted: false, // Not encrypted
-                publicKey: publicKey,
-                note: 'Upload successful but not encrypted'
-              };
-              
-              return res.json(result);
-            }
-          } catch (fallbackError) {
-            console.error('❌ Fallback upload also failed:', fallbackError.message);
-            throw fallbackError;
-          }
-        }
-      } catch (error) {
-        console.error('❌ Encrypted upload failed:', error);
-        
-        // Detailed error logging for SDK debugging
-        console.error('🔍 Detailed error analysis:');
-        console.error('  - Error name:', error.name);
-        console.error('  - Error code:', error.code);
-        console.error('  - Has response object:', !!error.response);
-        if (error.response) {
-          console.error('  - Response status:', error.response.status);
-          console.error('  - Response data:', JSON.stringify(error.response.data, null, 2));
-        }
-        
-        // Check for specific Lighthouse/Kavach error patterns
-        if (error.message?.includes('JWT')) {
-          console.error('  - JWT authentication issue detected');
-        }
-        if (error.message?.includes('kavach')) {
-          console.error('  - Kavach package issue detected');
-        }
-        if (error.message?.includes('network') || error.message?.includes('timeout')) {
-          console.error('  - Network connectivity issue detected');
-        }
-        if (error.message?.includes('encrypt')) {
-          console.error('  - Encryption process issue detected');
-        }
-        
-        // Don't mask errors - bubble up the real failure
-        return res.status(500).json({
-          success: false,
-          error: error.message || 'Unknown error during encryption',
-          details: {
-            name: error.name,
-            code: error.code
-          }
-        });
-      } finally {
-        // Clean up temp file - only if this is not a successful upload
-        if (!result || !result.success) {
-          try { 
             console.log('🧹 Cleaning up temporary file:', tempFilePath);
             fs.unlinkSync(tempFilePath);
             console.log('✅ Temporary file cleanup completed');
-          } catch (e) { 
+          } catch (e) {
             console.error('⚠️ Failed to clean up temp file:', e.message);
           }
-        } else {
-          console.log('ℹ️ Keeping temporary file for successful upload');
         }
       }
     } else {
@@ -252,69 +204,90 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       console.log('📤 Using standard upload (non-encrypted)');
 
       try {
-        // Create a local file in the project directory instead of using system temp
-        const fileHash = crypto.createHash('md5').update(req.file.buffer).digest('hex');
-        
-        // Create uploads directory if it doesn't exist
-        const uploadsDir = path.join(process.cwd(), 'uploads');
-        if (!fs.existsSync(uploadsDir)) {
-          fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-        
-        // Use a fixed location in project directory
-        const tempFilePath = path.join(uploadsDir, `${fileHash}-${req.file.originalname}`);
-        
-        // Write buffer directly to file
-        fs.writeFileSync(tempFilePath, req.file.buffer);
-        
         // Upload file using Lighthouse SDK
         const response = await lighthouse.upload(tempFilePath, apiKey);
-        
+
         // Clean up temporary file
         try {
           fs.unlinkSync(tempFilePath);
         } catch (e) {
           console.error('Failed to clean up temp file:', e.message);
         }
-        
-        // Parse response
+
         if (response && response.data && response.data.Hash) {
+          const hash = response.data.Hash;
+
           result = {
             success: true,
-            hash: response.data.Hash,
+            hash: hash,
             name: req.file.originalname,
             size: req.file.size,
-            encrypted: false
+            mimetype: req.file.mimetype,
+            encrypted: false,
+            note: 'Standard upload successful'
           };
-          
           return res.json(result);
-        } else {
-          throw new Error('Invalid response format');
         }
-      } catch (error) {
-        console.error('Standard upload error:', error);
+        throw new Error('No hash returned from standard upload - invalid response format');
+      } catch (standardUploadError) {
+        console.error('❌ Standard upload failed:', standardUploadError.message);
         return res.status(500).json({
           success: false,
-          error: error.message || 'Unknown error during upload'
+          error: standardUploadError.message || 'Standard upload failed'
         });
       }
     }
-
-    // If we get here, something went wrong
-    return res.status(500).json({
-      success: false,
-      error: 'Upload failed - unknown error'
-    });
   } catch (error) {
-    console.error('Upload endpoint error:', error);
-    return res.status(500).json({
+    console.error('File upload error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message || 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
     });
   }
 });
 
-// Download file by hash
+// Get file info by hash
+app.get('/file-info/:hash', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    if (!hash) {
+      return res.status(400).json({
+        success: false,
+        error: 'Hash is required'
+      });
+    }
+
+    console.log('🔍 Getting file info for:', hash);
+    const fileInfo = await lighthouseJS.getFileInfo(hash);
+
+    if (!fileInfo) {
+      return res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    }
+
+    console.log('✅ File info:', fileInfo);
+
+    // Return the raw fileInfo structure to ensure we don't lose any data
+    res.json({
+      success: true,
+      data: fileInfo.data || fileInfo,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('File info error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Download/proxy file by hash
 app.get('/download/:hash', async (req, res) => {
   try {
     const { hash } = req.params;
@@ -356,125 +329,131 @@ app.get('/download/:hash', async (req, res) => {
   }
 });
 
-// Share file with another wallet
-app.post('/share/:hash', async (req, res) => {
+// Decrypt and download encrypted file
+app.post('/decrypt/:hash', async (req, res) => {
   try {
     const { hash } = req.params;
-    const { publicKey, signedMessage, shareWith } = req.body;
+    const { publicKey, signedMessage, mimeType } = req.body;
 
-    if (!hash || !publicKey || !signedMessage || !shareWith) {
+    if (!hash || !publicKey || !signedMessage) {
       return res.status(400).json({
         success: false,
-        error: 'Hash, publicKey, signedMessage, and shareWith are required'
+        error: 'Hash, public key, and signed message are required'
       });
     }
 
-    console.log('🔄 Sharing file:', hash, 'from:', publicKey, 'to:', shareWith);
+    console.log('🔓 Decrypting file:', hash, 'for user:', publicKey);
 
-    // Use JS SDK to share file
-    const shareResponse = await lighthouse.shareFile(
-      publicKey,
-      shareWith,
-      hash,
-      signedMessage
-    );
+    try {
+      // Step 1: Fetch the encryption key
+      console.log('🔑 Fetching encryption key from Lighthouse...');
+      const keyResponse = await lighthouse.fetchEncryptionKey(
+        hash,
+        publicKey,
+        signedMessage
+      );
 
-    res.json({
-      success: true,
-      data: shareResponse,
-      timestamp: new Date().toISOString()
-    });
+      if (!keyResponse || !keyResponse.data || !keyResponse.data.key) {
+        throw new Error('Failed to fetch encryption key');
+      }
 
+      const encryptionKey = keyResponse.data.key;
+      console.log('✅ Encryption key retrieved successfully');
+
+      // Step 2: Decrypt the file using the key
+      console.log('🔓 Decrypting file using the encryption key...');
+      
+      // Use mimeType if provided, otherwise null to auto-detect
+      const decryptedFile = await lighthouse.decryptFile(
+        hash,
+        encryptionKey,
+        mimeType || null
+      );
+
+      if (!decryptedFile) {
+        throw new Error('Failed to decrypt file');
+      }
+
+      console.log('✅ File decrypted successfully');
+      console.log('📊 Decrypted file size:', decryptedFile.byteLength || decryptedFile.length, 'bytes');
+      
+      // Try to determine the content type from the decrypted file
+      let contentType = mimeType || 'application/octet-stream';
+      
+      // If it's an image, try to detect the format from the magic bytes
+      if (decryptedFile && decryptedFile.length > 4) {
+        const header = decryptedFile.slice(0, 4);
+        
+        // Check for common image formats
+        if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) {
+          contentType = 'image/jpeg';
+        } else if (
+          header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47
+        ) {
+          contentType = 'image/png';
+        } else if (
+          header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46
+        ) {
+          contentType = 'image/gif';
+        } else if (
+          header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46
+        ) {
+          contentType = 'image/webp';
+        }
+      }
+      
+      console.log('🔤 Detected content type:', contentType);
+
+      // Send the decrypted file back to the client with the detected content type
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${hash}"`);
+      res.setHeader('Content-Length', decryptedFile.byteLength || decryptedFile.length);
+      res.setHeader('X-Content-Type-Detected', contentType); // Custom header for debugging
+      res.send(Buffer.from(decryptedFile));
+
+    } catch (decryptError) {
+      console.error('❌ Decryption error:', decryptError.message);
+      
+      // Try alternative decryption method
+      try {
+        console.log('🔄 Trying alternative decryption method...');
+        
+        // Use the decrypt function from our JS SDK wrapper
+        const decryptedData = await lighthouseJS.decryptFile(hash, publicKey, signedMessage);
+        
+        if (!decryptedData) {
+          throw new Error('Alternative decryption failed');
+        }
+        
+        console.log('✅ Alternative decryption successful');
+        console.log('📊 Decrypted file size:', decryptedData.byteLength || decryptedData.length, 'bytes');
+        
+        // Try to determine content type
+        let contentType = mimeType || 'application/octet-stream';
+        
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${hash}"`);
+        res.setHeader('Content-Length', decryptedData.byteLength || decryptedData.length);
+        res.setHeader('X-Content-Type-Detected', contentType); // Custom header for debugging
+        res.send(Buffer.from(decryptedData));
+        
+      } catch (altError) {
+        console.error('❌ Alternative decryption also failed:', altError.message);
+        
+        // If both methods fail, return error
+        throw new Error('All decryption methods failed: ' + decryptError.message);
+      }
+    }
   } catch (error) {
-    console.error('Share file error:', error);
+    console.error('Decryption error:', error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
-// Revoke access to a file
-app.post('/revoke/:hash', async (req, res) => {
-  try {
-    const { hash } = req.params;
-    const { publicKey, signedMessage, revokeFrom } = req.body;
-
-    if (!hash || !publicKey || !signedMessage || !revokeFrom) {
-      return res.status(400).json({
-        success: false,
-        error: 'Hash, publicKey, signedMessage, and revokeFrom are required'
-      });
-    }
-
-    console.log('🔄 Revoking access to file:', hash, 'from:', revokeFrom);
-
-    // Use JS SDK to revoke access
-    const revokeResponse = await lighthouse.revokeFileAccess(
-      publicKey,
-      revokeFrom,
-      hash,
-      signedMessage
-    );
-
-    res.json({
-      success: true,
-      data: revokeResponse,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error('Revoke access error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Apply access control to a file
-app.post('/access-control/:hash', async (req, res) => {
-  try {
-    const { hash } = req.params;
-    const { publicKey, signedMessage, conditions, aggregator } = req.body;
-
-    if (!hash || !publicKey || !signedMessage || !conditions || !aggregator) {
-      return res.status(400).json({
-        success: false,
-        error: 'Hash, publicKey, signedMessage, conditions, and aggregator are required'
-      });
-    }
-
-    console.log('🔄 Applying access control to file:', hash);
-
-    // Use JS SDK to apply access control
-    const accessResponse = await lighthouse.applyAccessCondition(
-      publicKey,
-      hash,
-      signedMessage,
-      conditions,
-      aggregator
-    );
-
-    res.json({
-      success: true,
-      data: accessResponse,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error('Access control error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// View image endpoint
+// View encrypted image (for browser viewing)
 app.post('/view-image/:hash', async (req, res) => {
   try {
     const { hash } = req.params;
@@ -489,39 +468,64 @@ app.post('/view-image/:hash', async (req, res) => {
 
     console.log('🖼️ Viewing image:', hash);
 
-    // If public key and signed message are provided, try to decrypt
     if (publicKey && signedMessage) {
+      console.log('🔓 Attempting to decrypt file for viewing');
       try {
-        console.log('🔓 Attempting to decrypt file for viewing');
-        const decryptedData = await lighthouse.decryptFile(hash, publicKey, signedMessage);
-        
-        if (decryptedData) {
-          console.log('✅ File decrypted successfully');
-          res.setHeader('Content-Type', 'image/jpeg'); // Assuming it's an image
-          return res.send(Buffer.from(decryptedData));
+        // Step 1: Fetch the encryption key
+        const keyResponse = await lighthouse.fetchEncryptionKey(
+          hash,
+          publicKey,
+          signedMessage
+        );
+
+        if (!keyResponse || !keyResponse.data || !keyResponse.data.key) {
+          throw new Error('Failed to fetch encryption key');
         }
+
+        const encryptionKey = keyResponse.data.key;
+
+        // Step 2: Decrypt the file using the key
+        // Use image/jpeg as default MIME type for images
+        const decryptedFile = await lighthouse.decryptFile(
+          hash,
+          encryptionKey,
+          'image/jpeg'
+        );
+
+        if (!decryptedFile) {
+          throw new Error('Failed to decrypt file');
+        }
+
+        console.log('✅ Image decrypted successfully for viewing');
+
+        // Send the decrypted file back to the client
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Content-Disposition', 'inline');
+        res.send(Buffer.from(decryptedFile));
+        return;
       } catch (decryptError) {
         console.error('❌ Decryption failed, falling back to public gateway:', decryptError.message);
       }
     }
 
-    // Fallback to public gateway if decryption fails or not requested
+    // If decryption fails or no keys provided, fall back to public gateway
     console.log('📥 Fetching from public gateway');
     const gatewayUrl = `https://gateway.lighthouse.storage/ipfs/${hash}`;
-    const imageResponse = await fetch(gatewayUrl);
+    const fileResponse = await fetch(gatewayUrl);
 
-    if (!imageResponse.ok) {
+    if (!fileResponse.ok) {
       return res.status(404).json({
         success: false,
-        error: 'Image not found'
+        error: 'File not found'
       });
     }
 
-    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+    // Proxy the file response
+    const contentType = fileResponse.headers.get('content-type') || 'image/jpeg';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600');
 
-    const arrayBuffer = await imageResponse.arrayBuffer();
+    const arrayBuffer = await fileResponse.arrayBuffer();
     res.send(Buffer.from(arrayBuffer));
 
   } catch (error) {
@@ -533,74 +537,34 @@ app.post('/view-image/:hash', async (req, res) => {
   }
 });
 
-// Get authentication message
+// Get auth message for signing
 app.get('/auth-message/:address', async (req, res) => {
   try {
     const { address } = req.params;
-    
     if (!address) {
       return res.status(400).json({
         success: false,
         error: 'Address is required'
       });
     }
-    
-    console.log('📋 Getting auth message for address:', address);
+
     console.log('📋 Getting auth message for:', address);
-    
-    // Use JS SDK to get auth message
     const authMessage = await lighthouse.getAuthMessage(address);
+
     console.log('✅ Auth message:', authMessage);
     
-    // Extract the message from the response
     const message = authMessage.data.message;
     console.log('✅ Auth message retrieved:', message);
-    
+
     res.json({
       success: true,
       message: message,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('Auth message error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Sign auth message with private key
-app.post('/sign-auth-message', async (req, res) => {
-  try {
-    const { privateKey } = req.body;
-    
-    if (!privateKey) {
-      return res.status(400).json({
-        success: false,
-        error: 'Private key is required'
-      });
-    }
-    
-    // Use ethers to derive address from private key
-    const wallet = new Wallet(privateKey);
-    const address = wallet.address;
-    
-    console.log('📋 Signing auth message for address:', address);
-
-    // Use JS SDK helper to sign auth message
-    const signedMessage = await lighthouseJS.signAuthMessage(privateKey);
-
-    res.json({
-      success: true,
-      address: address,
-      signedMessage: signedMessage,
+      data: authMessage.data,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('Sign auth message error:', error);
+    console.error('Get auth message error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -614,9 +578,7 @@ app.listen(port, () => {
   console.log(`- Health: http://localhost:${port}/health`);
   console.log(`- Upload: POST http://localhost:${port}/upload`);
   console.log(`- Download: GET http://localhost:${port}/download/:hash`);
-  console.log(`- Share File: POST http://localhost:${port}/share/:hash`);
-  console.log(`- Revoke Access: POST http://localhost:${port}/revoke/:hash`);
-  console.log(`- Access Control: POST http://localhost:${port}/access-control/:hash`);
+  console.log(`- Decrypt: POST http://localhost:${port}/decrypt/:hash`);
   console.log(`- View Image: POST http://localhost:${port}/view-image/:hash`);
   console.log(`- Auth Message: GET http://localhost:${port}/auth-message/:address`);
 });
