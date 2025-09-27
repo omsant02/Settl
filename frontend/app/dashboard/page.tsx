@@ -1,27 +1,48 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"
-import { Search, Home, FileText, Plus, Users, UserCheck } from "lucide-react"
+import { Search, Home, FileText, Plus, Users, UserCheck, Calendar, DollarSign } from "lucide-react"
 
-// Hardcoded demo data for expenses
-const expenseData = [
-  { name: "Shopping", value: 120, color: "var(--color-chart-1)" },
-  { name: "Food", value: 90, color: "var(--color-chart-2)" },
-  { name: "Travel", value: 60, color: "var(--color-chart-3)" },
-  { name: "Entertainment", value: 45, color: "var(--color-chart-4)" },
-  { name: "Bills", value: 35, color: "var(--color-chart-5)" },
+// Hardcoded demo data for groups
+const activeGroups = [
+  {
+    id: 1,
+    name: "Weekend Trip",
+    members: ["You", "alice.eth", "bob.eth", "charlie.eth"],
+    totalExpenses: 1250.0,
+    yourBalance: -320.5,
+    lastActivity: "2 hours ago",
+  },
+  {
+    id: 2,
+    name: "Office Lunch",
+    members: ["You", "david.eth", "eve.eth"],
+    totalExpenses: 85.5,
+    yourBalance: 15.25,
+    lastActivity: "1 day ago",
+  },
+  {
+    id: 3,
+    name: "Roommate Expenses",
+    members: ["You", "frank.eth"],
+    totalExpenses: 450.0,
+    yourBalance: -125.0,
+    lastActivity: "3 days ago",
+  },
 ]
-
-const totalExpenses = expenseData.reduce((sum, item) => sum + item.value, 0)
 
 export default function DashboardPage() {
   const [isWalletConnected, setIsWalletConnected] = useState(true) // Demo state
   const [searchQuery, setSearchQuery] = useState("")
+  const router = useRouter() // Added router for navigation
+
+  const handleGroupClick = (groupId: number) => {
+    router.push(`/groups/${groupId}`)
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -66,18 +87,7 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6 pb-24">
         {/* Balance Summary Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Total Balance - Larger Card */}
-          <Card className="md:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-lg text-foreground">Total Balance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-primary">$1,247.50</div>
-              <p className="text-sm text-muted-foreground mt-1">Available balance</p>
-            </CardContent>
-          </Card>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Amount to Get */}
           <Card>
             <CardHeader>
@@ -101,76 +111,78 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Expense Visualization Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Circular Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg text-foreground">All Time Expenses</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer
-                config={{
-                  shopping: { label: "Shopping", color: "var(--color-chart-1)" },
-                  food: { label: "Food", color: "var(--color-chart-2)" },
-                  travel: { label: "Travel", color: "var(--color-chart-3)" },
-                  entertainment: { label: "Entertainment", color: "var(--color-chart-4)" },
-                  bills: { label: "Bills", color: "var(--color-chart-5)" },
-                }}
-                className="h-[300px]"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={expenseData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={120}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {expenseData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+        {/* Currently Active Groups Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-foreground">Currently Active Groups</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-primary border-primary hover:bg-primary hover:text-primary-foreground bg-transparent"
+            >
+              View All
+            </Button>
+          </div>
 
-          {/* Expense Breakdown */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg text-foreground">Expense Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {expenseData.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between py-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: item.color }} />
-                      <span className="font-medium text-foreground">{item.name}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-semibold text-foreground">${item.value}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {((item.value / totalExpenses) * 100).toFixed(1)}%
+          <div className="space-y-4">
+            {activeGroups.map((group) => (
+              <Card
+                key={group.id}
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => handleGroupClick(group.id)} // Added click handler for navigation
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="font-semibold text-lg text-foreground">{group.name}</h3>
+                        <span className="text-sm text-muted-foreground">•</span>
+                        <span className="text-sm text-muted-foreground">{group.members.length} members</span>
+                      </div>
+
+                      <div className="flex items-center gap-4 mb-3">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            Total: ${group.totalExpenses.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">{group.lastActivity}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-sm text-muted-foreground">Members:</span>
+                        <div className="flex gap-1">
+                          {group.members.slice(0, 3).map((member, index) => (
+                            <span key={index} className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                              {member}
+                            </span>
+                          ))}
+                          {group.members.length > 3 && (
+                            <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                              +{group.members.length - 3} more
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    <div className="text-right">
+                      <div
+                        className={`text-lg font-semibold ${group.yourBalance >= 0 ? "text-chart-2" : "text-chart-1"}`}
+                      >
+                        {group.yourBalance >= 0 ? "+" : ""}${group.yourBalance.toFixed(2)}
+                      </div>
+                      <p className="text-sm text-muted-foreground">{group.yourBalance >= 0 ? "You get" : "You owe"}</p>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <div className="border-t border-border mt-4 pt-4">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-foreground">Total</span>
-                  <span className="font-bold text-primary">${totalExpenses}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </main>
 
