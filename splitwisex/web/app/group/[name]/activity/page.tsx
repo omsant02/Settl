@@ -151,7 +151,7 @@ export default function ActivityPage() {
                           </div>
                           {ex.cid && (() => {
                             // Try the fallback URL first for existing broken receipts
-                            const receiptUrl = ipfsGateway(ex.cid, true)
+                            const receiptUrl = ipfsGateway(ex.cid)
                             console.log('Activity Receipt CID:', ex.cid)
                             console.log('Activity Receipt URL (with fix):', receiptUrl)
                             return (

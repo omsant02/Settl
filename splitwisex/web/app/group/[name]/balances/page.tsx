@@ -41,7 +41,7 @@ const getINRValue = (amount: string, tokenAddress: string): string => {
 export default function BalancesPage() {
   const router = useRouter()
   const params = useParams<{ name: string }>()
-  const name = decodeURIComponent(params.name)
+  const name = decodeURIComponent(params?.name || '')
   const { data, loading, error } = useSubgraph<any>(GET_GROUP_BY_NAME(name), [name])
   const { address: userAddress } = useAccount()
 

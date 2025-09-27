@@ -9,10 +9,14 @@
     "node": "hardhat node",
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "deploy:amoy": "hardhat run scripts/deploy.ts --network polygonAmoy",
+    "deploy:polygon": "hardhat run scripts/deploy.ts --network polygon",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
     "seed:sepolia": "hardhat run scripts/seed.ts --network sepolia",
     "seed:local": "hardhat run scripts/seed.ts --network localhost",
     "export": "ts-node scripts/export-abi.ts"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",

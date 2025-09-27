@@ -27,7 +27,7 @@ graph deploy ethglobal --version-label v0.0.4
 ## Step 4: Test Full Demo
 - ✅ Web app: http://localhost:3000
 - ✅ Real contract interactions
-- ✅ Receipt uploads to Pinata
+- ✅ Receipt uploads to Storacha
 - ✅ Cross-chain settlement
 
 You're 2 minutes away from a full working demo! 🚀

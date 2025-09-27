@@ -1,157 +1,57 @@
-import { create } from '@storacha/client'
+import { uploadReceiptToFilecoin, getFilecoinGatewayUrl } from './filecoin-storage'
 
-export async function uploadReceipt(file: File): Promise<string> {
-  console.log('Uploading receipt to IPFS via Storacha:', file.name, file.size, 'bytes');
+export async function uploadReceipt(file: File, walletClient?: any, expenseId?: string): Promise<string> {
+  console.log('🚀 Uploading receipt to Filecoin via company wallet:', file.name, file.size, 'bytes');
 
-  try {
-    // First try real IPFS upload via Storacha
-    const cid = await uploadToStoracha(file);
-    if (cid) {
-      console.log('Receipt uploaded successfully to IPFS with CID:', cid);
-      return cid;
-    }
-  } catch (error) {
-    console.warn('Storacha upload failed, falling back to content-based CID:', error);
-  }
+  // Only server-side Filecoin upload - no fallbacks
+  console.log('📤 Uploading via Synapse SDK server-side integration...');
 
-  try {
-    // Fallback to content-based CID
-    console.log('Generating content-based IPFS CID');
-    const cid = await generateContentBasedCID(file);
-    console.log('Generated fallback CID:', cid);
-    return cid;
-  } catch (error) {
-    console.error('Receipt upload failed:', error);
+  const formData = new FormData()
+  formData.append('file', file)
+  if (expenseId) formData.append('expenseId', expenseId)
 
-    // Ultimate fallback
-    const fallbackCid = `dev_fallback_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    console.warn('Using ultimate fallback CID:', fallbackCid);
-    return fallbackCid;
+  const response = await fetch('/api/filecoin/upload', {
+    method: 'POST',
+    body: formData
+  })
+
+  const result = await response.json()
+
+  if (response.ok && result.success) {
+    console.log('✅ Receipt successfully uploaded to Filecoin:', result);
+    return result.storageId // Returns "filecoin:pieceCid"
+  } else {
+    console.error('❌ Filecoin upload failed:', result.error);
+    throw new Error(`Filecoin upload failed: ${result.error || 'Unknown error'}`)
   }
 }
 
-async function uploadToStoracha(file: File): Promise<string | null> {
-  try {
-    // Create client from environment variables
-    const email = process.env.NEXT_PUBLIC_STORACHA_EMAIL;
-    if (!email) {
-      throw new Error('NEXT_PUBLIC_STORACHA_EMAIL not configured');
-    }
-
-    // In browser environment, we need to use the CLI authentication
-    // This will read from the user's local Storacha configuration
-    console.log('Attempting upload via Storacha CLI...');
-
-    // For now, we'll use the CLI approach via API call
-    // This would need a backend endpoint that calls the CLI
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch('/api/upload-storacha', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (response.ok) {
-      const result = await response.json();
-      console.log('Storacha API response:', result);
-      console.log('CID being returned:', result.cid);
-      return result.cid;
-    } else {
-      console.warn('Storacha API upload failed:', response.statusText);
-      return null;
-    }
-  } catch (error) {
-    console.warn('Storacha upload error:', error);
-    return null;
-  }
-}
-
-
-async function generateContentBasedCID(file: File): Promise<string> {
-  // Generate a content-based hash that looks like a real IPFS CID
-  console.log('Generating content-based CID for', file.name);
-
-  const arrayBuffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-  // Create a valid IPFS CID v1 format (base32 encoded)
-  const cid = `bafkreih${hashHex.substring(0, 52)}`;
-
-  console.log('Generated content-based CID:', cid);
-
-  // This creates deterministic CIDs based on file content
-  // Same file = same CID (like real IPFS)
-  return cid;
-}
+// Only Filecoin uploads - no fallbacks or alternative methods
 
 /**
- * Browser-based Storacha upload (requires user authentication)
- * This requires the user to have authenticated via the CLI first
- */
-export async function uploadReceiptWithStoracha(file: File): Promise<string> {
-  try {
-    const client = await create();
-
-    // Upload file to Storacha
-    const cid = await client.uploadFile(file);
-    console.log('File uploaded to Storacha with CID:', cid.toString());
-
-    return cid.toString();
-  } catch (error) {
-    console.error('Storacha browser upload failed:', error);
-    throw error;
-  }
-}
-
-/**
- * Get IPFS gateway URL for a CID using the best available gateway
- * @param cid The IPFS CID
+ * Get gateway URL for Filecoin storage only
+ * @param cid The Filecoin storage identifier (filecoin:pieceCid)
  * @returns string Gateway URL
  */
-export const ipfsGateway = (cid: string, attemptFix = false) => {
-  console.log('ipfsGateway called with CID:', cid, 'attemptFix:', attemptFix)
+export const ipfsGateway = (cid: string) => {
+  console.log('🔗 Getting gateway URL for Filecoin storage:', cid)
 
-  // For development mock CIDs, show a placeholder
-  if (cid.startsWith('dev_') || cid.startsWith('mock_')) {
-    const url = `https://via.placeholder.com/400x300/e2e8f0/64748b?text=Receipt+Uploaded+${cid.slice(-8)}`
-    console.log('Returning placeholder URL:', url)
+  // Only handle Filecoin storage - no fallbacks
+  if (cid.startsWith('filecoin:')) {
+    const [, pieceCid] = cid.split(':')
+    const url = getFilecoinGatewayUrl(pieceCid)
+    console.log('✅ Returning Filecoin gateway URL:', url)
     return url
   }
 
-  // If the CID includes a filename path, handle legacy vs new formats
-  if (cid.includes('/')) {
-    const [directoryCid, filename] = cid.split('/')
-
-    // If this is a retry attempt and the filename doesn't have the storacha prefix,
-    // try to construct the correct filename based on known pattern
-    if (attemptFix && !filename.startsWith('storacha-upload-')) {
-      // For the specific case we know about, try the correct filename
-      // This is a temporary fix for existing broken receipts
-      const correctedFilename = `storacha-upload-1758563557531-${filename}`
-      const correctedUrl = `https://w3s.link/ipfs/${directoryCid}/${correctedFilename}`
-      console.log('Attempting fix with corrected filename:', correctedUrl)
-      return correctedUrl
-    }
-
-    const url = `https://w3s.link/ipfs/${cid}`
-    console.log('CID contains path, returning full URL:', url)
-    return url
-  }
-
-  // For simple CIDs, use just the CID
-  const url = `https://w3s.link/ipfs/${cid}`
-  console.log('Simple CID, returning URL:', url)
-  return url
+  // If not Filecoin format, throw error
+  throw new Error(`Invalid storage format: ${cid}. Only Filecoin storage supported.`)
 }
 
 /**
  * Alternative gateway options
  */
 export const ipfsGateways = {
-  storacha: (cid: string) => `https://w3s.link/ipfs/${cid}`,
   ipfs: (cid: string) => `https://ipfs.io/ipfs/${cid}`,
   cloudflare: (cid: string) => `https://cloudflare-ipfs.com/ipfs/${cid}`,
   dweb: (cid: string) => `https://dweb.link/ipfs/${cid}`,

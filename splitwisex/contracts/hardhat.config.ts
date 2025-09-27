@@ -30,6 +30,12 @@ const config: HardhatUserConfig = {
       accounts: [PRIVATE_KEY],
       chainId: 137,
     },
+    filecoinCalibration: {
+      // Filecoin Calibration testnet (chainId 314159)
+      url: process.env.FILECOIN_RPC || "https://api.calibration.node.glif.io/rpc/v1",
+      accounts: [PRIVATE_KEY],
+      chainId: 314159,
+    },
   },
   etherscan: {
     apiKey: {

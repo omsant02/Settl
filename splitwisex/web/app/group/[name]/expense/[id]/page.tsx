@@ -3,7 +3,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useSubgraph } from '@/hooks/useSubgraph'
 import { GET_EXPENSE_BY_ID, GET_GROUP_BY_NAME } from '@/lib/queries'
 import ENSName from '@/components/ENSName'
-import { ipfsGateway } from '@/lib/ipfs'
+import { ipfsGateway, ipfsGateways } from '@/lib/ipfs'
 import Link from 'next/link'
 import { useAccount, useWriteContract } from 'wagmi'
 import { useState } from 'react'
@@ -57,6 +57,61 @@ export default function ExpenseDetailsPage() {
   const { address: userAddress } = useAccount()
   const { writeContractAsync } = useWriteContract()
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Receipt image component with fallback gateways
+  function ReceiptImage({ cid, primaryUrl, isLegacy }: { cid: string; primaryUrl: string; isLegacy: boolean }) {
+    const [currentUrlIndex, setCurrentUrlIndex] = useState(0)
+    const [hasError, setHasError] = useState(false)
+
+    // Get clean CID for fallback gateways
+    const cleanCid = cid.startsWith('ipfs:') ? cid.substring(5) : cid
+    const fallbackUrls = [
+      primaryUrl,
+      ipfsGateways.ipfs(cleanCid),
+      ipfsGateways.cloudflare(cleanCid),
+      ipfsGateways.dweb(cleanCid),
+    ]
+
+    const handleImageError = () => {
+      console.log(`Image failed to load from: ${fallbackUrls[currentUrlIndex]}`)
+
+      if (currentUrlIndex < fallbackUrls.length - 1) {
+        setCurrentUrlIndex(prev => prev + 1)
+        setHasError(false)
+      } else {
+        setHasError(true)
+      }
+    }
+
+    const handleImageLoad = () => {
+      console.log(`Image loaded successfully from: ${fallbackUrls[currentUrlIndex]}`)
+      setHasError(false)
+    }
+
+    if (hasError) {
+      return (
+        <div className="w-full h-64 bg-gray-100 rounded-lg flex flex-col items-center justify-center text-gray-500">
+          <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p className="text-sm font-medium mb-2">Receipt unavailable</p>
+          <p className="text-xs text-center">
+            CID: {cleanCid.slice(0, 10)}...{cleanCid.slice(-10)}
+          </p>
+        </div>
+      )
+    }
+
+    return (
+      <img
+        src={fallbackUrls[currentUrlIndex]}
+        alt="Receipt"
+        className="w-full rounded-lg shadow-sm"
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+      />
+    )
+  }
 
   // Get group data
   const { data: groupData } = useSubgraph<any>(GET_GROUP_BY_NAME(groupName), [groupName])
@@ -192,19 +247,17 @@ export default function ExpenseDetailsPage() {
             {(() => {
               // Check if this is a legacy receipt that needs fixing
               const isLegacyReceipt = expense.cid.includes('/') && !expense.cid.includes('storacha-upload-')
-              const imageUrl = isLegacyReceipt ? ipfsGateway(expense.cid, true) : ipfsGateway(expense.cid)
+              const primaryUrl = ipfsGateway(expense.cid)
 
               console.log('Receipt CID:', expense.cid)
               console.log('Is legacy receipt:', isLegacyReceipt)
-              console.log('Using image URL:', imageUrl)
+              console.log('Using image URL:', primaryUrl)
 
               return (
-                <img
-                  src={imageUrl}
-                  alt="Receipt"
-                  className="w-full rounded-lg shadow-sm"
-                  onLoad={() => console.log('Image loaded successfully')}
-                  onError={() => console.log('Image failed to load')}
+                <ReceiptImage
+                  cid={expense.cid}
+                  primaryUrl={primaryUrl}
+                  isLegacy={isLegacyReceipt}
                 />
               )
             })()}

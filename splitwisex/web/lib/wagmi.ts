@@ -1,19 +1,9 @@
-import { http, createConfig } from 'wagmi'
+import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { sepolia, polygonAmoy } from 'wagmi/chains'
-import { injected, coinbaseWallet } from 'wagmi/connectors'
 
-export const config = createConfig({
+export const config = getDefaultConfig({
+  appName: 'SplitwiseX',
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'splitwisex-placeholder-id',
   chains: [sepolia, polygonAmoy],
-  connectors: [
-    // Generic injected for MetaMask and other wallets
-    injected(),
-    // Coinbase Wallet
-    coinbaseWallet({
-      appName: 'SplitwiseX',
-    }),
-  ],
-  transports: {
-    [sepolia.id]: http(),
-    [polygonAmoy.id]: http()
-  },
+  ssr: true, // For Next.js
 })

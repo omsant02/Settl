@@ -10,7 +10,7 @@ import Ledger from '@/abis/Ledger.json'
 export default function MembersPage() {
   const router = useRouter()
   const params = useParams<{ name: string }>()
-  const name = decodeURIComponent(params.name)
+  const name = decodeURIComponent(params?.name || '')
   const { data, loading, error } = useSubgraph<any>(GET_GROUP_BY_NAME(name), [name])
   const { address: userAddress } = useAccount()
   const { writeContractAsync } = useWriteContract()

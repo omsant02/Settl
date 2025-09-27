@@ -23,8 +23,11 @@ npm install
 # Replace the placeholder private key with your actual testnet private key
 nano .env
 
-# Deploy to Polygon Amoy testnet
+# Deploy to Polygon Amoy testnet (requires testnet MATIC)
 npm run deploy:amoy
+
+# OR deploy to Polygon mainnet (requires ~$1-2 MATIC for gas)
+npm run deploy:polygon
 
 # Export ABI to web and subgraph folders
 npm run export
@@ -74,7 +77,7 @@ npm run dev
 ```
 
 **Current Status**: ✅ Running on http://localhost:3001
-- **Pinata IPFS**: ✅ Configured
+- **Storacha IPFS**: ✅ Configured
 - **LI.FI Route API**: ✅ Configured
 - **The Graph**: ✅ Connected to Studio
 
@@ -142,7 +145,8 @@ POLYGONSCAN_KEY=IA7QU9RMHVBBTW6QUMW3SKUNAHSRCCYV9V
 ```bash
 NEXT_PUBLIC_SUBGRAPH_URL=https://api.studio.thegraph.com/query/121313/ethglobal/v0.0.2
 NEXT_PUBLIC_LEDGER_ADDRESS=YOUR_DEPLOYED_CONTRACT_ADDRESS
-NEXT_PUBLIC_PINATA_JWT=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+NEXT_PUBLIC_STORACHA_EMAIL=your_storacha_email@example.com
+NEXT_PUBLIC_STORACHA_DID=your_storacha_did
 NEXT_PUBLIC_ROUTE_API=https://li.quest/v1
 ```
 
@@ -158,7 +162,7 @@ NEXT_PUBLIC_ROUTE_API=https://li.quest/v1
    - ✅ Run seed script
 
 2. **Receipt upload fails**
-   - ✅ Check Pinata JWT token
+   - ✅ Check Storacha authentication
    - ✅ Verify internet connection
 
 3. **Wallet connection issues**
@@ -173,11 +177,19 @@ NEXT_PUBLIC_ROUTE_API=https://li.quest/v1
 
 ## 🌍 Network Configuration
 
-### Polygon Amoy Testnet
+### Polygon Networks
+
+#### Polygon Amoy Testnet
 - **Chain ID**: 80002
 - **RPC**: https://rpc.amoy.polygon.technology
 - **Explorer**: https://amoy.polygonscan.com/
 - **Faucet**: https://faucet.polygon.technology/
+
+#### Polygon Mainnet
+- **Chain ID**: 137
+- **RPC**: https://polygon-mainnet.infura.io/v3/YOUR_API_KEY
+- **Explorer**: https://polygonscan.com/
+- **Get MATIC**: Any major exchange (Binance, Coinbase, etc.)
 
 ### Add to MetaMask:
 ```
@@ -203,7 +215,7 @@ For mainnet deployment:
 
 ✅ **Infrastructure**:
 - The Graph Studio deployment
-- Pinata IPFS integration
+- Storacha IPFS integration
 - LI.FI cross-chain routing
 - MetaMask wallet connection
 
@@ -220,7 +232,7 @@ For mainnet deployment:
 
 - **Subgraph Studio**: https://thegraph.com/studio/subgraph/ethglobal
 - **Polygon Amoy Faucet**: https://faucet.polygon.technology/
-- **Pinata Dashboard**: https://pinata.cloud/
+- **Storacha Console**: https://console.storacha.network/
 - **LI.FI Documentation**: https://docs.li.fi/
 
 Your SplitwiseX project is ready for ETHGlobal! 🚀

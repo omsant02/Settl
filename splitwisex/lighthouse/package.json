@@ -1,0 +1,39 @@
+{
+  "name": "lighthouse-filecoin",
+  "version": "1.0.0",
+  "description": "Standalone Lighthouse integration for Filecoin storage using JS SDK",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'Using JS SDK - no build needed'",
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@lighthouse-web3/kavach": "^0.1.9",
+    "@lighthouse-web3/sdk": "^0.2.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "ethers": "^6.7.1",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.13",
+    "@types/express": "^4.17.17",
+    "@types/multer": "^1.4.7",
+    "@types/node": "^20.19.17",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "lighthouse",
+    "filecoin",
+    "storage",
+    "ipfs",
+    "javascript",
+    "js-sdk"
+  ],
+  "author": "SplitwiseX Team",
+  "license": "MIT"
+}

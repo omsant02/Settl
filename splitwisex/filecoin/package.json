@@ -1,0 +1,31 @@
+{
+  "name": "splitwisex-filecoin",
+  "version": "1.0.0",
+  "description": "Filecoin integration for SplitwiseX using Synapse SDK",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "dev": "tsx --watch synapse/ReceiptStorage.ts"
+  },
+  "dependencies": {
+    "@filoz/synapse-sdk": "latest",
+    "dotenv": "^16.0.0",
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.17",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "filecoin",
+    "synapse-sdk",
+    "storage",
+    "receipts",
+    "hackathon",
+    "typescript"
+  ],
+  "author": "SplitwiseX Team",
+  "license": "MIT"
+}

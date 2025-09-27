@@ -33,25 +33,31 @@ export function setGlifToken(token: string) {
 
 /**
  * Initialize Synapse SDK with browser provider (MetaMask)
- * @param provider The ethers provider from MetaMask
+ * @param providerOrSigner The ethers provider or signer
  * @param network The Filecoin network to use (defaults to environment setting)
  * @returns A Synapse instance
  */
 export async function initSynapseBrowser(
-  provider: any,
+  providerOrSigner: any,
   network?: 'mainnet' | 'calibration'
 ) {
   // Use environment variable if network not specified
   const networkToUse = network || (env.FILECOIN_NETWORK as 'mainnet' | 'calibration')
-  
-  console.log(`Initializing Synapse SDK with browser provider for ${networkToUse} network`)
-  
+
+  console.log(`Initializing Synapse SDK with browser provider/signer for ${networkToUse} network`)
+
+  // Check if we have a signer or provider
+  const isSigner = providerOrSigner && typeof providerOrSigner.signMessage === 'function'
+
   const synapse = await Synapse.create({
-    provider,
-    rpcURL: RPC_URLS[networkToUse].websocket,
+    ...(isSigner
+      ? { signer: providerOrSigner }
+      : { provider: providerOrSigner }
+    ),
+    rpcURL: RPC_URLS[networkToUse].http, // Use HTTP for broader compatibility
     authorization: glifToken ? `Bearer ${glifToken}` : undefined
   })
-  
+
   return synapse
 }
 

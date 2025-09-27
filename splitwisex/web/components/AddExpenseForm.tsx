@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { uploadReceipt, ipfsGateway, createFilecoinDeal } from '@/lib/ipfs'
 import Ledger from '@/abis/Ledger.json'
-import { useWriteContract, useAccount } from 'wagmi'
+import { useWriteContract, useAccount, useWalletClient } from 'wagmi'
 import { useSubgraph } from '@/hooks/useSubgraph'
 import { GET_GROUP } from '@/lib/queries'
 import ENSName from './ENSName'
@@ -70,6 +70,7 @@ export default function AddExpenseForm({ groupId, groupData, onClose, onExpenseA
   const [selectedCurrency, setSelectedCurrency] = useState(CURRENCY_OPTIONS[0]) // Default to ETH
   const { writeContractAsync } = useWriteContract()
   const { address: userAddress } = useAccount()
+  const { data: walletClient } = useWalletClient()
 
   // Use provided group data or fetch it if needed
   const { data: fetchedGroupData } = useSubgraph<any>(groupData ? '' : GET_GROUP(groupId), [groupId])
@@ -185,13 +186,21 @@ export default function AddExpenseForm({ groupId, groupData, onClose, onExpenseA
     if (!file) return
     setBusy(true)
     try {
-      // Direct IPFS upload - simple and reliable
-      console.log('Uploading receipt to IPFS, filename:', file.name)
-      const c = await uploadReceipt(file)
-      console.log('uploadReceipt returned CID:', c)
-      console.log('CID type:', typeof c, 'Length:', c?.length)
+      // Try Filecoin storage first (hackathon requirement)
+      console.log('Uploading receipt - attempting Filecoin then IPFS fallback:', file.name)
+
+      // Use wallet client for Filecoin upload if available
+      const c = await uploadReceipt(file, walletClient)
+      console.log('uploadReceipt returned storage ID:', c)
+      console.log('Storage ID type:', typeof c, 'Length:', c?.length)
       setCid(c)
-      console.log('Receipt uploaded successfully - final CID:', c)
+
+      // Only show success message if actually uploaded to Filecoin
+      if (c.startsWith('filecoin:')) {
+        console.log('✅ Receipt successfully uploaded to Filecoin - final storage ID:', c)
+      } else {
+        console.log('⚠️ Using fallback storage (not Filecoin) - storage ID:', c)
+      }
     } catch (error: any) {
       console.error('Receipt upload failed:', error)
       alert(`Failed to upload receipt: ${error.message || 'Unknown error'}`)
