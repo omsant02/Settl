@@ -181,7 +181,7 @@ export default function GroupPage() {
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2">
           <Button
             className="bg-chart-2 hover:bg-chart-2/90 text-white px-8 py-3 rounded-full shadow-lg"
-            onClick={() => router.push("/add-expense")}
+            onClick={() => router.push(`/add-expense?groupId=${groupId}`)}
           >
             <Plus className="h-5 w-5 mr-2" />
             Add expense

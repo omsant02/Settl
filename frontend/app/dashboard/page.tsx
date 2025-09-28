@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useAccount, useBalance, useDisconnect } from "wagmi"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Search, Home, FileText, Plus, Users, UserCheck, Calendar, DollarSign } from "lucide-react"
+import { Search, Home, FileText, Plus, Users, UserCheck, Calendar, DollarSign, ChevronDown, Copy, LogOut } from "lucide-react"
+import CreateGroupModal from "@/components/CreateGroupModal"
 
 // Hardcoded demo data for groups
 const activeGroups = [
@@ -16,6 +18,7 @@ const activeGroups = [
     totalExpenses: 1250.0,
     yourBalance: -320.5,
     lastActivity: "2 hours ago",
+    createdAt: Date.now() - (2 * 24 * 60 * 60 * 1000), // 2 days ago
   },
   {
     id: 2,
@@ -24,6 +27,7 @@ const activeGroups = [
     totalExpenses: 85.5,
     yourBalance: 15.25,
     lastActivity: "1 day ago",
+    createdAt: Date.now() - (5 * 24 * 60 * 60 * 1000), // 5 days ago
   },
   {
     id: 3,
@@ -32,16 +36,119 @@ const activeGroups = [
     totalExpenses: 450.0,
     yourBalance: -125.0,
     lastActivity: "3 days ago",
+    createdAt: Date.now() - (7 * 24 * 60 * 60 * 1000), // 7 days ago
   },
 ]
 
 export default function DashboardPage() {
-  const [isWalletConnected, setIsWalletConnected] = useState(true) // Demo state
   const [searchQuery, setSearchQuery] = useState("")
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  // Initialize groups from localStorage or use default groups
+  const [groups, setGroups] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const storedGroups = localStorage.getItem('settl-groups')
+      if (storedGroups) {
+        try {
+          const parsed = JSON.parse(storedGroups)
+          return parsed.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
+        } catch (error) {
+          console.error('Error parsing stored groups:', error)
+        }
+      }
+    }
+    return [...activeGroups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  })
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const router = useRouter() // Added router for navigation
 
-  const handleGroupClick = (groupId: number) => {
-    router.push(`/groups/${groupId}`)
+  // Real wallet connection
+  const { address, isConnected, isConnecting } = useAccount()
+  const { data: balance } = useBalance({ address })
+  const { disconnect } = useDisconnect()
+
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Save groups to localStorage whenever groups change
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem('settl-groups', JSON.stringify(groups))
+      console.log('💾 Groups saved to localStorage:', groups.length)
+    }
+  }, [groups, mounted])
+
+  // Helper function to format address
+  const formatAddress = (addr: string | undefined) => {
+    if (!addr) return ''
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+
+  // Helper function to format balance
+  const formatBalance = (bal: any) => {
+    if (!bal) return '0.000 ETH'
+    return `${parseFloat(bal.formatted).toFixed(3)} ${bal.symbol}`
+  }
+
+  const handleGroupClick = (groupName: string) => {
+    router.push(`/group/${encodeURIComponent(groupName)}`)
+  }
+
+  const handleAddClick = () => {
+    setIsCreateModalOpen(true)
+  }
+
+  const handleGroupCreated = (newGroup: {
+    id: string | number;
+    name: string;
+    description: string;
+    members: string[];
+    totalExpenses: number;
+    yourBalance: number;
+    lastActivity: string;
+    createdAt?: number;
+  }) => {
+    console.log('📝 Dashboard received new group:', newGroup)
+
+    // Convert to the format expected by the dashboard
+    const groupData = {
+      id: typeof newGroup.id === 'string' ? parseInt(newGroup.id) : newGroup.id,
+      name: newGroup.name,
+      members: newGroup.members,
+      totalExpenses: newGroup.totalExpenses,
+      yourBalance: newGroup.yourBalance,
+      lastActivity: newGroup.lastActivity,
+      createdAt: newGroup.createdAt || Date.now()
+    }
+
+    console.log('📝 Adding group to dashboard:', groupData)
+
+    // Add new group at the beginning (top) of the list
+    setGroups(prevGroups => {
+      const updatedGroups = [groupData, ...prevGroups]
+      // Sort by creation time, newest first
+      const sortedGroups = updatedGroups.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      console.log('📝 Updated groups list:', sortedGroups.map(g => ({ id: g.id, name: g.name, createdAt: g.createdAt })))
+      return sortedGroups
+    })
+
+    // Redirect to the newly created group
+    console.log('📝 Redirecting to group:', `/group/${encodeURIComponent(newGroup.name)}`)
+    router.push(`/group/${encodeURIComponent(newGroup.name)}`)
+  }
+
+  const handleCopyAddress = async () => {
+    if (address) {
+      await navigator.clipboard.writeText(address)
+      setIsDropdownOpen(false)
+    }
+  }
+
+  const handleDisconnect = () => {
+    disconnect()
+    setIsDropdownOpen(false)
   }
 
   return (
@@ -51,7 +158,12 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           {/* Logo */}
           <div className="flex-shrink-0">
-            <h1 className="font-sans font-bold text-xl text-foreground">Settl</h1>
+            <h1
+              className="font-sans font-bold text-xl text-foreground cursor-pointer hover:text-primary transition-colors"
+              onClick={() => router.push('/')}
+            >
+              Settl
+            </h1>
           </div>
 
           {/* Search Bar */}
@@ -68,17 +180,63 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Connect Wallet / ENS Name */}
+          {/* Connect Wallet / Wallet Info */}
           <div className="flex-shrink-0">
-            {isWalletConnected ? (
-              <div className="text-foreground font-medium">pratik.settl.eth</div>
+            {!mounted ? (
+              // Show placeholder during hydration to prevent mismatch
+              <div className="text-muted-foreground">
+                <div className="text-sm">Loading...</div>
+              </div>
+            ) : isConnecting ? (
+              <div className="text-muted-foreground">
+                <div className="text-sm">Connecting...</div>
+              </div>
+            ) : isConnected && address ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="text-right hover:bg-muted/50 rounded-lg p-2 transition-colors flex items-center gap-2"
+                >
+                  <div>
+                    <div className="text-foreground font-medium">{formatAddress(address)}</div>
+                    <div className="text-sm text-muted-foreground">{formatBalance(balance)}</div>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </button>
+
+                {isDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-card border border-border rounded-lg shadow-lg z-10">
+                    <div className="p-2">
+                      <button
+                        onClick={handleCopyAddress}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted rounded-md transition-colors"
+                      >
+                        <Copy className="h-4 w-4" />
+                        Copy Address
+                      </button>
+                      <button
+                        onClick={handleDisconnect}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isDropdownOpen && (
+                  <div
+                    className="fixed inset-0 z-0"
+                    onClick={() => setIsDropdownOpen(false)}
+                  />
+                )}
+              </div>
             ) : (
-              <Button
-                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg"
-                onClick={() => setIsWalletConnected(true)}
-              >
-                Connect Wallet
-              </Button>
+              <div className="text-muted-foreground">
+                <div className="text-sm">Wallet not connected</div>
+                <div className="text-xs">Please connect in header</div>
+              </div>
             )}
           </div>
         </div>
@@ -125,11 +283,11 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-4">
-            {activeGroups.map((group) => (
+            {groups.map((group) => (
               <Card
                 key={group.id}
                 className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => handleGroupClick(group.id)} // Added click handler for navigation
+                onClick={() => handleGroupClick(group.name)} // Updated to use group name
               >
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
@@ -202,7 +360,10 @@ export default function DashboardPage() {
           </button>
 
           {/* Add Button (Center) */}
-          <button className="bg-accent text-accent-foreground rounded-full p-3 shadow-md hover:shadow-lg transition-all hover:scale-105">
+          <button
+            onClick={handleAddClick}
+            className="bg-accent text-accent-foreground rounded-full p-3 shadow-md hover:shadow-lg transition-all hover:scale-105"
+          >
             <Plus className="h-6 w-6" />
           </button>
 
@@ -219,6 +380,13 @@ export default function DashboardPage() {
           </button>
         </div>
       </nav>
+
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onGroupCreated={handleGroupCreated}
+      />
     </div>
   )
 }

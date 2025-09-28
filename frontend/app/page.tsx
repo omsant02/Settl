@@ -2,9 +2,24 @@
 
 import CardNav from "@/components/ui/CardNav"
 import { Button } from "@/components/ui/button"
-import { Wallet } from "lucide-react"
+import { ArrowRight } from "lucide-react"
+import { WalletConnectionHandler } from "@/components/WalletConnectionHandler"
+import { useAccount } from 'wagmi'
+import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
+  const { isConnected } = useAccount()
+  const router = useRouter()
+
+  const handleGetStarted = () => {
+    if (isConnected) {
+      router.push('/dashboard')
+    } else {
+      // If not connected, the button will show ConnectButton modal
+      // The WalletConnectionHandler will handle the redirect after connection
+    }
+  }
+
   const navItems = [
     {
       label: "Features",
@@ -38,6 +53,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background relative">
+      <WalletConnectionHandler />
       <CardNav
         logoText="Settl"
         items={navItems}
@@ -60,10 +76,11 @@ export default function HomePage() {
             <div>
               <Button
                 size="lg"
+                onClick={handleGetStarted}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 rounded-xl shadow-lg transition-all duration-300 px-8 py-4 text-lg font-medium group"
               >
-                <Wallet className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
-                Connect Wallet
+                {isConnected ? 'Go to Dashboard' : 'Get Started'}
+                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
             </div>
           </div>
