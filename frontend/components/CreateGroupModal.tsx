@@ -94,7 +94,7 @@ export default function CreateGroupModal({ isOpen, onClose, onGroupCreated }: Cr
 
       // Create the group with the new Ledger contract - no registration required
       const txHash = await writeContractAsync({
-        address: SPLITWISE_CONTRACT_ADDRESS,
+        address: SPLITWISE_CONTRACT_ADDRESS as `0x${string}`,
         abi: SPLITWISE_CONTRACT_ABI,
         functionName: 'createGroup',
         args: [groupName, [address]] // Include creator in members array

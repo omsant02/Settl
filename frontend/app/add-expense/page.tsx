@@ -111,7 +111,7 @@ export default function AddExpensePage() {
       const participants = [address]
 
       const txHash = await writeContractAsync({
-        address: SPLITWISE_CONTRACT_ADDRESS,
+        address: SPLITWISE_CONTRACT_ADDRESS as `0x${string}`,
         abi: SPLITWISE_CONTRACT_ABI,
         functionName: 'addExpense',
         args: [

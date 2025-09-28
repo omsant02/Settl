@@ -1,7 +1,7 @@
 // Demo wallet addresses for testing member functionality
 export const DEMO_WALLETS = [
   {
-    address: '0x1234567890123456789012345678901234567890',
+    address: '0x0b07ab58f72d13150Fcd119700aae76d9D161138',
     name: 'Alice',
     displayName: 'alice.eth',
     avatar: '👩‍💼'

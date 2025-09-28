@@ -126,11 +126,11 @@ export default function DashboardPage() {
     console.log('📝 Adding group to dashboard:', groupData)
 
     // Add new group at the beginning (top) of the list
-    setGroups(prevGroups => {
+    setGroups((prevGroups: any[]) => {
       const updatedGroups = [groupData, ...prevGroups]
       // Sort by creation time, newest first
-      const sortedGroups = updatedGroups.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      console.log('📝 Updated groups list:', sortedGroups.map(g => ({ id: g.id, name: g.name, createdAt: g.createdAt })))
+      const sortedGroups = updatedGroups.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
+      console.log('📝 Updated groups list:', sortedGroups.map((g: any) => ({ id: g.id, name: g.name, createdAt: g.createdAt })))
       return sortedGroups
     })
 
